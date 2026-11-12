@@ -26,7 +26,7 @@
   --st-recover: #2F5BD3;
   --on: #1F8A70;
   --off: #E3E7ED;
-  --band-alpha: .13;
+  --band-alpha: .13; --fall-alpha: .2;
   --ma1: #D9480F; --ma2: #7048E8; --ma3: #0C8599; --ma4: #C2255C;
   --f-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   --f-mono: "IBM Plex Mono", ui-monospace, "Consolas", monospace;
@@ -34,11 +34,11 @@
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #10151D; --panel: #171E28; --ink: #E4E9F0; --muted: #94A0B2; --line: #2A3442; --faint: #1E2633;
   --accent: #7C9BFF; --price: #E4E9F0; --st-fall: #F0695F; --st-bounce: #E3A43A; --st-check: #3FC29C; --st-recover: #7C9BFF;
-  --on: #3FC29C; --off: #283140; --band-alpha: .17; --ma1: #FF8A4C; --ma2: #A78BFA; --ma3: #3BC9DB; --ma4: #F06595; color-scheme: dark; } }
+  --on: #3FC29C; --off: #283140; --band-alpha: .17; --fall-alpha: .26; --ma1: #FF8A4C; --ma2: #A78BFA; --ma3: #3BC9DB; --ma4: #F06595; color-scheme: dark; } }
 :root[data-theme="dark"] {
   --bg: #10151D; --panel: #171E28; --ink: #E4E9F0; --muted: #94A0B2; --line: #2A3442; --faint: #1E2633;
   --accent: #7C9BFF; --price: #E4E9F0; --st-fall: #F0695F; --st-bounce: #E3A43A; --st-check: #3FC29C; --st-recover: #7C9BFF;
-  --on: #3FC29C; --off: #283140; --band-alpha: .17; --ma1: #FF8A4C; --ma2: #A78BFA; --ma3: #3BC9DB; --ma4: #F06595; color-scheme: dark; }
+  --on: #3FC29C; --off: #283140; --band-alpha: .17; --fall-alpha: .26; --ma1: #FF8A4C; --ma2: #A78BFA; --ma3: #3BC9DB; --ma4: #F06595; color-scheme: dark; }
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -85,6 +85,8 @@ h1 { font-size: 1.6rem; line-height: 1.25; margin: 0; letter-spacing: -.01em; te
 .tools { margin-bottom: 8px; gap: 8px 18px; }
 .ctl { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .ctl label { color: var(--ink); font-weight: 500; }
+.ctl label.soft { color: var(--muted); font-weight: 400; cursor: pointer; }
+input[type="checkbox"] { accent-color: var(--accent); margin: 0; }
 input[type="text"] { font: .85rem var(--f-mono); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); width: 9.5em; }
 .range-info { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font: .8rem var(--f-mono); color: var(--muted); margin-bottom: 6px; min-height: 26px; }
 .range-info .hint { font-family: var(--f-body); }
@@ -183,6 +185,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
           <option value="macd">MACD (12, 26, 9)</option>
           <option value="disp">이격도 (20일)</option>
         </select></span>
+      <span class="ctl"><input id="allStates" type="checkbox"><label for="allStates" class="soft">다른 판정 구간도 표시</label></span>
     </div>
     <div class="range-info"><span id="rangeInfo"></span><span class="hint" id="panHint"></span><button class="btn small" id="latestBtn" type="button" hidden>최근으로</button></div>
     <div class="chart" id="chart" tabindex="0" aria-label="지수 그래프. 기간을 고른 뒤 좌우로 끌거나 화살표 키로 이동"></div>
@@ -448,10 +451,12 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
         let j = i; const sv = M.state.vals[i];
         while (j + 1 < e && M.state.vals[j + 1] === sv) j++;
         const st = stateOf(sv);
-        if (st) {
+        const isFall = st && st.key === 'fall';
+        if (st && (isFall || $('allStates').checked)) {
           const half = cnt > 1 ? PW / (cnt - 1) / 2 : 0;
-          const x0 = Math.max(L, x(i) - half), x1 = Math.min(W - R, x(j) + half);
-          parts.push(`<rect x="${x0.toFixed(1)}" y="${T}" width="${Math.max(.6, x1 - x0).toFixed(1)}" height="${PH}" fill="${css(st.v)}" fill-opacity="${css('--band-alpha')}"/>`);
+          const x0 = Math.max(L, x(i) - half), x1 = Math.min(W - R, x(j) + half), w = Math.max(.6, x1 - x0).toFixed(1);
+          parts.push(`<rect x="${x0.toFixed(1)}" y="${T}" width="${w}" height="${PH}" fill="${css(st.v)}" fill-opacity="${css(isFall ? '--fall-alpha' : '--band-alpha')}"/>`);
+          if (isFall) parts.push(`<rect x="${x0.toFixed(1)}" y="${T}" width="${w}" height="5" fill="${css(st.v)}"/>`);
         }
         i = j + 1;
       }
@@ -583,7 +588,10 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       sp.innerHTML = line ? `<i style="background:${color};height:2px;opacity:${alpha}"></i>` : `<i style="background:${color};opacity:${alpha}"></i>`;
       sp.append(text); lg.appendChild(sp);
     };
-    STATES.forEach((st) => { const hit = [...seen].find((v) => st.re.test(v)); if (hit) add(css(st.v), hit, .55); });
+    STATES.forEach((st) => {
+      if (st.key !== 'fall' && !$('allStates').checked) return;
+      const hit = [...seen].find((v) => st.re.test(v)); if (hit) add(css(st.v), hit + ' 구간', st.key === 'fall' ? .8 : .55);
+    });
     if (nC) add(css('--on'), '조건 충족', 1);
     mas.forEach((d, k) => add(css('--ma' + (k + 1)), d + '일 이동평균', 1, true));
     if (bb) add(css('--accent'), '볼린저 밴드 20일 ±2σ', .8, true);
@@ -731,6 +739,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
   $('latestBtn').addEventListener('click', () => { endIdx = null; if (M) renderChart(); });
   $('overlay').addEventListener('change', (e) => { overlay = e.target.value; if (M) renderChart(); });
   $('ind').addEventListener('change', () => { if (M) renderChart(); });
+  $('allStates').addEventListener('change', () => { if (M) renderChart(); });
   $('maDays').addEventListener('input', () => { if (M) schedule(); });
   let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => M && renderChart(), 120); });
   try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => M && renderAll()); } catch (_) {}
