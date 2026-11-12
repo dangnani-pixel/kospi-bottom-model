@@ -184,7 +184,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     <div class="ctrls tools">
       <span class="ctl"><label for="overlay">보조선</label>
         <select id="overlay"><option value="">없음</option></select></span>
-      <span class="ctl"><label for="maDays">이동평균</label>
+      <span class="ctl"><label for="maDays">이동평균(EMA)</label>
         <input id="maDays" type="text" inputmode="numeric" value="60" autocomplete="off" size="11" aria-describedby="maHelp"> <span id="maHelp">일 (쉼표로 최대 4개)</span></span>
       <span class="ctl"><label for="ind">기술적 지표</label>
         <select id="ind">
@@ -381,7 +381,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     M.cache = M.cache || {};
     if (M.cache[key]) return M.cache[key];
     const p = M.price.vals; let r;
-    if (key.startsWith('ma:')) r = sma(p, +key.slice(3));
+    if (key.startsWith('ma:')) r = ema(p, +key.slice(3));
     else if (key === 'bb') {
       const m = sma(p, 20);
       const sd = m.map((mv, i) => { if (mv == null) return null; let s = 0; for (let j = i - 19; j <= i; j++) s += (p[j] - mv) ** 2; return Math.sqrt(s / 20); });
@@ -602,7 +602,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       const hit = [...seen].find((v) => st.re.test(v)); if (hit) add(css(st.v), hit + ' 구간', st.key === 'fall' ? .8 : .55);
     });
     if (nC) add(css('--on'), '조건 충족', 1);
-    mas.forEach((d, k) => add(css('--ma' + (k + 1)), d + '일 이동평균', 1, true));
+    mas.forEach((d, k) => add(css('--ma' + (k + 1)), d + '일 EMA', 1, true));
     if (bb) add(css('--accent'), '볼린저 밴드 20일 ±2σ', .8, true);
     if (indKey === 'macd') { add(css('--accent'), 'MACD', 1, true); add(css('--ma1'), '시그널', 1, true); }
     if (ov) add(css('--accent'), ov.name + ' (오른쪽 축)', .9, true);
@@ -625,7 +625,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     cross.setAttribute('x1', xi); cross.setAttribute('x2', xi); cross.setAttribute('visibility', 'visible');
     let h = `<div class="d">${fmtD(M.dates[i])}</div><div class="p">${fmtN(M.price.vals[i])}</div>`;
     if (M.state) { const st = stateOf(M.state.vals[i]); if (st) h += `<div style="color:${css(st.v)};font-weight:700">${esc(M.state.vals[i])}</div>`; }
-    G.mas.forEach((d, k) => { const v = ind('ma:' + d)[i]; h += `<div style="color:${css('--ma' + (k + 1))}">${d}일선 ${fmtShort(v)}</div>`; });
+    G.mas.forEach((d, k) => { const v = ind('ma:' + d)[i]; h += `<div style="color:${css('--ma' + (k + 1))}">${d}일 EMA ${fmtShort(v)}</div>`; });
     if (G.bb && G.bb.up[i] != null) h += `<div style="color:${css('--accent')}">볼린저 ${fmtShort(G.bb.lo[i])} ~ ${fmtShort(G.bb.up[i])}</div>`;
     if (G.subInfo) {
       const vals = G.subInfo.series.map(([arr]) => fmtShort(arr[i]));
