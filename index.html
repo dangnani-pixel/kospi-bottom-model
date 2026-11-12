@@ -106,6 +106,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
 .tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
   padding: 8px 10px; font-size: .8rem; line-height: 1.45; box-shadow: 0 6px 18px rgba(0,0,0,.12); min-width: 170px; z-index: 2; }
 .tip .d { font: 500 .8rem var(--f-mono); color: var(--muted); }
+.tip .tip-pbr { margin-top: 6px; padding-top: 5px; border-top: 1px solid var(--line); font: 500 .8rem var(--f-mono); }
 .tip .p { font: 600 1rem var(--f-mono); }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .8rem; color: var(--muted); margin-top: 10px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
@@ -632,6 +633,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     }
     if (G.ov) h += `<div style="color:${css('--accent')}">${esc(G.ov.name)}: ${fmtShort(G.ov.vals[i])}</div>`;
     if (M.conds.length) h += '<div style="margin-top:4px">' + M.conds.map((c) => `${c.vals[i] === 1 ? '✓' : c.vals[i] === 0 ? '·' : '?'} ${esc(condLabel(c.name))}`).join('<br>') + '</div>';
+    h += pbrTipLine(fmtD(M.dates[i]), i);
     tip.innerHTML = h; tip.hidden = false;
     const sx = xi * (r.width / G.W), tw = tip.offsetWidth;
     tip.style.left = (sx + 14 + tw > r.width ? Math.max(0, sx - tw - 14) : sx + 14) + 'px';
@@ -719,6 +721,18 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     const h = rows[0].map((x) => x.trim());
     pbrRows = rows.slice(1).map((r) => Object.fromEntries(h.map((k, i) => [k, (r[i] ?? '').trim()]))).filter((r) => r.pbr && !isNaN(+r.pbr));
   }
+  // PBR for one chart date: pbr_history.csv first, then a pbr column in signals_daily.csv
+  function pbrTipLine(dateStr, i) {
+    let v = null, note = '';
+    const row = pbrRows.find((r) => r.date === dateStr);
+    if (row) { v = +row.pbr; if (row.intraday === '1') note = ' (장중 ' + row.time_kst + ')'; }
+    else if (M) { const c = M.others.find((o) => /^pbr$/i.test(o.name)); if (c && c.vals[i] != null) v = c.vals[i]; }
+    const first = pbrRows.length ? pbrRows[0].date : null;
+    const body = v != null ? `PBR ${v.toFixed(2)}배${note}`
+      : first && dateStr < first ? `PBR 기록 없음 (${first}부터 기록)` : 'PBR 기록 없음';
+    return `<div class="tip-pbr">${body}</div>`;
+  }
+
   function renderPbr() {
     const box = $('pbrBox');
     let last = pbrRows[pbrRows.length - 1];
