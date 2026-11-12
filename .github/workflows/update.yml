@@ -1,0 +1,71 @@
+# 평일 장 마감 뒤 데이터를 새로 받아 신호를 계산하고, 결과를 커밋한 다음 GitHub Pages에 배포한다.
+name: Daily update
+
+on:
+  schedule:
+    - cron: "40 7 * * 1-5"   # 16:40 KST (월~금). GitHub 사정으로 몇십 분 늦게 돌 수 있음
+  workflow_dispatch:          # Actions 탭에서 수동 실행
+  push:
+    branches: [main]
+    paths: ["index.html", "kospi_bottom_model.py", ".github/workflows/update.yml"]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: daily-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install pandas numpy
+
+      - name: Run model
+        id: model
+        continue-on-error: true
+        run: python kospi_bottom_model.py
+
+      - name: Commit new data
+        if: steps.model.outcome == 'success'
+        run: |
+          if git diff --quiet -- signals_daily.csv; then
+            echo "No new trading day; nothing to commit."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add signals_daily.csv report.md kospi_history.csv
+            git commit -m "Update signals $(date -u +%Y-%m-%d)"
+            git push
+          fi
+
+      - name: Collect site files
+        run: |
+          mkdir -p _site
+          cp index.html signals_daily.csv report.md _site/
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: Report model failure
+        if: steps.model.outcome == 'failure'
+        run: |
+          echo "::error::kospi_bottom_model.py failed; the site still shows the previous data."
+          exit 1

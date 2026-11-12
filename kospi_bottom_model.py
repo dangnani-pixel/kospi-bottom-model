@@ -70,15 +70,25 @@ def naver_kospi() -> pd.Series:
     return s.sort_index()
 
 
+def previous_kospi() -> pd.Series:
+    """지난번에 저장한 코스피 전체 이력 (Yahoo가 막혔을 때 과거 구간 대체용)."""
+    prev = pd.read_csv(OUT / "kospi_history.csv", index_col=0, parse_dates=True)["kospi"]
+    return prev.dropna()
+
+
 def kospi_series() -> tuple[pd.Series, str]:
-    y = yahoo("^KS11")
+    try:
+        y, ysrc = yahoo("^KS11"), "Yahoo Finance ^KS11"
+    except Exception as e:  # noqa: BLE001
+        print("  Yahoo 실패, 저장해 둔 kospi_history.csv 사용:", e)
+        y, ysrc = previous_kospi(), "저장해 둔 이력(원출처 Yahoo Finance ^KS11)"
     try:
         n = naver_kospi()
         s = pd.concat([y[y.index < n.index[0]], n])
-        src = f"Yahoo Finance ^KS11(~{n.index[0]:%Y-%m-%d} 이전) + 네이버 금융 KRX 종가(이후)"
+        src = f"{ysrc}(~{n.index[0]:%Y-%m-%d} 이전) + 네이버 금융 KRX 종가(이후)"
     except Exception as e:  # noqa: BLE001
         print("  네이버 실패, Yahoo만 사용:", e)
-        s, src = y, "Yahoo Finance ^KS11 종가"
+        s, src = y, f"{ysrc} 종가"
     # 장중에 실행하면 오늘 값은 종가가 아니므로 뺀다 (KRX 마감 15:30 KST)
     now_kst = pd.Timestamp.now(tz="Asia/Seoul")
     if s.index[-1].date() == now_kst.date() and (now_kst.hour, now_kst.minute) < (15, 40):
@@ -106,7 +116,13 @@ def load() -> tuple[pd.DataFrame, dict]:
     print("코스피 지수 (Yahoo ^KS11 + 네이버 금융)")
     kospi, notes["kospi"] = kospi_series()
     print("원/달러 환율 (Yahoo KRW=X)")
-    krw = yahoo("KRW=X")
+    try:
+        krw = yahoo("KRW=X")
+        notes["fx"] = "원/달러 환율(Yahoo KRW=X, 2003-12부터)"
+    except Exception as e:  # noqa: BLE001
+        print("  Yahoo 실패, FRED DEXKOUS로 대체:", e)
+        krw = fred("DEXKOUS")
+        notes["fx"] = "원/달러 환율(FRED DEXKOUS, Yahoo 접속 실패로 대체. 며칠 늦게 갱신됨)"
     print("미국 2년물 금리 (FRED DGS2)")
     dgs2 = fred("DGS2")
     print("미국 하이일드 스프레드 (FRED BAMLH0A0HYM2)")
@@ -127,8 +143,7 @@ def load() -> tuple[pd.DataFrame, dict]:
     # 미국 지표는 한국 장 마감 뒤에 나오므로 하루 늦춰 붙인다(미리 보기 방지).
     for name, s in [("usdkrw", krw), ("ust2y", dgs2), ("credit_spread", credit)]:
         s = s.reindex(df.index.union(s.index)).ffill()
-        df[name] = s.reindex(df.index).shift(1 if name != "usdkrw" else 0)
-    notes["fx"] = "원/달러 환율(Yahoo KRW=X, 2003-12부터)"
+        df[name] = s.reindex(df.index).shift(0 if name == "usdkrw" and "Yahoo" in notes["fx"] else 1)
     return df, notes
 
 
@@ -231,7 +246,7 @@ def write_report(df: pd.DataFrame, eps: list[dict], notes: dict) -> str:
     d = last.name.date()
     names = {"credit_ok": "신용 안정", "fx_ok": "외환 안정", "tightening_ok": "긴축 둔화", "ma6m_ok": "6개월선 회복", "vol_ok": "변동성 진정"}
     L = [f"# 코스피 바닥 신호 리포트", "",
-         f"생성: {datetime.now():%Y-%m-%d %H:%M} · 데이터 마지막 날짜: **{d}** · 참고용 분석이며 투자 자문이 아닙니다.", "",
+         f"생성: {pd.Timestamp.now(tz='Asia/Seoul'):%Y-%m-%d %H:%M} KST · 데이터 마지막 날짜: **{d}** · 참고용 분석이며 투자 자문이 아닙니다.", "",
          "## 현재 상태", "",
          f"- 코스피: **{last['kospi']:,.2f}** (252일 고점 대비 {last['drawdown_pct']:+.1f}%)",
          f"- 판정: **{last['state']}** (체크 항목 {int(last['conditions_met'])} / {int(last['conditions_known'])} 충족)", ""]
@@ -293,7 +308,7 @@ def write_report(df: pd.DataFrame, eps: list[dict], notes: dict) -> str:
     L += ["## 데이터", "",
           f"- 코스피 지수: {notes['kospi']}. 장중(15:40 전)에 실행하면 오늘 값은 제외",
           f"- 신용: {notes['credit']}",
-          f"- 외환: {notes['fx']}. 이전 기간은 외환 항목을 빼고 계산",
+          f"- 외환: {notes['fx']}. 자료가 없는 초기 기간은 외환 항목을 빼고 계산",
           "- 긴축: 미국 2년물 국채금리(FRED DGS2)",
           "- 변동성: VKOSPI 대신 코스피 20일 실현변동성(연율화)",
           "- 미국 지표는 한국 장 마감 후 발표되므로 하루 늦춰 반영", "",
@@ -320,6 +335,7 @@ def main() -> int:
     for c in ["credit_ok", "fx_ok", "tightening_ok", "ma6m_ok", "vol_ok", "conditions_met"]:
         out[c] = out[c].astype("Int64")
     out.round(3).to_csv(OUT / "signals_daily.csv", date_format="%Y-%m-%d")
+    df[["kospi"]].rename_axis("date").round(2).to_csv(OUT / "kospi_history.csv", date_format="%Y-%m-%d")
     (OUT / "report.md").write_text(write_report(df, eps, notes), encoding="utf-8")
     last = out.iloc[-1]
     print(f"\n완료: {len(out)}행, 마지막 {out.index[-1].date()} · 판정 {last['state']} · 하락 구간 {len(eps)}개")
