@@ -174,10 +174,10 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       <div class="ctrls">
         <div class="seg" id="ranges">
           <button type="button" data-d="31">1개월</button>
-          <button type="button" data-d="365">1년</button>
+          <button type="button" data-d="365" aria-pressed="true">1년</button>
           <button type="button" data-d="1096">3년</button>
           <button type="button" data-d="3653">10년</button>
-          <button type="button" data-d="0" aria-pressed="true">전체</button>
+          <button type="button" data-d="0">전체</button>
         </div>
       </div>
     </div>
@@ -307,7 +307,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
   }
 
   // ---------- state ----------
-  let M = null, rangeDays = 0, endIdx = null, overlay = '', reportMd = '', sourceDesc = '';
+  let M = null, rangeDays = 365, endIdx = null, overlay = '', reportMd = '', sourceDesc = '';
 
   function fmtD(d) { return d ? d.toISOString().slice(0, 10) : '–'; }
   function fmtN(v, dp = 2) { return v == null ? '–' : v.toLocaleString('ko-KR', { minimumFractionDigits: dp, maximumFractionDigits: dp }); }
