@@ -32,11 +32,15 @@ jobs:
           python-version: "3.12"
 
       - name: Install
-        run: pip install pandas numpy
+        run: pip install "pandas<3" numpy "pykrx==1.2.9"
 
       - name: Run model
         id: model
         continue-on-error: true
+        env:
+          # KRX 정보데이터시스템 계정 (Settings > Secrets and variables > Actions). 없으면 PBR은 네이버 추정치만 사용
+          KRX_ID: ${{ secrets.KRX_ID }}
+          KRX_PW: ${{ secrets.KRX_PW }}
         run: python kospi_bottom_model.py
 
       - name: Commit new data

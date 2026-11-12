@@ -19,8 +19,8 @@
 ## 직접 갱신
 
 ```
-pip install pandas numpy
-python kospi_bottom_model.py
+pip install "pandas<3" numpy pykrx==1.2.9
+python kospi_bottom_model.py   # KRX 공식 PBR까지 받으려면 KRX_ID, KRX_PW 환경변수 설정
 ```
 
 장중(15:40 KST 전)에 실행하면 오늘 값은 종가가 아니라서 빼고 계산합니다.
@@ -32,6 +32,6 @@ python kospi_bottom_model.py
 - 외환: Yahoo Finance KRW=X (2003-12부터). 접속이 안 되면 FRED DEXKOUS로 대체
 - 긴축: FRED DGS2 (미국 2년물)
 - 변동성: 코스피 20일 실현변동성 (VKOSPI 대체)
-- PBR(참고용, 판정 미반영): 네이버 증권 종목별 시가총액·PBR로 계산한 추정치. KRX 공식 지수 PBR은 로그인이 필요해 직접 받지 못함. `pbr_history.csv`에 매일 한 줄씩 쌓임
+- PBR(참고용, 판정 미반영): KRX 정보데이터시스템 공식 코스피 PBR(2000년부터 일별). 로그인이 필요해서 저장소 **Settings → Secrets and variables → Actions**에 `KRX_ID`, `KRX_PW`를 등록해야 받습니다. 그날 공식 값이 아직 없으면 네이버 증권 종목별 시가총액·PBR로 계산한 추정치를 쓰고, 다음 실행 때 공식 값으로 바뀝니다. 기록은 `pbr_history.csv`(source 열: KRX / naver_est)
 
 참고용 분석이며 매수·매도 판단이나 투자 자문이 아닙니다.

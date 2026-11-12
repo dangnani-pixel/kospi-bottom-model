@@ -157,7 +157,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       <div id="stateChip"></div>
       <div class="meta" id="stateDur" style="margin-top:6px"></div>
       <div class="pbr" id="pbrBox" hidden>
-        <p class="label">코스피 PBR (추정)</p>
+        <p class="label" id="pbrLabel">코스피 PBR</p>
         <div><span class="pbr-v" id="pbrVal"></span><span class="meta" id="pbrWhen"></span></div>
         <div class="meta" id="pbrNote"></div>
       </div>
@@ -725,7 +725,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
   function pbrTipLine(dateStr, i) {
     let v = null, note = '';
     const row = pbrRows.find((r) => r.date === dateStr);
-    if (row) { v = +row.pbr; if (row.intraday === '1') note = ' (장중 ' + row.time_kst + ')'; }
+    if (row) { v = +row.pbr; note = row.source === 'KRX' ? '' : row.intraday === '1' ? ' (추정, 장중 ' + row.time_kst + ')' : ' (추정)'; }
     else if (M) { const c = M.others.find((o) => /^pbr$/i.test(o.name)); if (c && c.vals[i] != null) v = c.vals[i]; }
     const first = pbrRows.length ? pbrRows[0].date : null;
     const body = v != null ? `PBR ${v.toFixed(2)}배${note}`
@@ -742,12 +742,15 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     }
     box.hidden = !last;
     if (!last) return;
+    const official = last.source === 'KRX';
+    $('pbrLabel').textContent = official ? '코스피 PBR (KRX 공식)' : '코스피 PBR (추정)';
     $('pbrVal').textContent = (+last.pbr).toFixed(2) + '배';
     $('pbrWhen').textContent = ' ' + last.date + (last.time_kst ? ' ' + last.time_kst : '') + (last.intraday === '1' ? ' 장중' : '');
     const prev = pbrRows.length > 1 ? pbrRows[pbrRows.length - 2] : null;
     const parts = [];
     if (prev) { const d = +last.pbr - +prev.pbr; parts.push(`전 기록(${prev.date}) 대비 ${d >= 0 ? '+' : ''}${d.toFixed(2)}`); }
-    if (last.n_stocks) parts.push(`보통주 ${(+last.n_stocks).toLocaleString('ko-KR')}종목 · 시가총액 ${(+last.coverage * 100).toFixed(1)}% 반영`);
+    if (official) parts.push('한국거래소 정보데이터시스템');
+    else if (last.n_stocks) parts.push(`네이버 종목별 PBR로 계산 · 보통주 ${(+last.n_stocks).toLocaleString('ko-KR')}종목 · 시가총액 ${(+last.coverage * 100).toFixed(1)}% 반영`);
     parts.push('판정에는 쓰지 않는 참고 지표');
     $('pbrNote').textContent = parts.join(' · ');
   }

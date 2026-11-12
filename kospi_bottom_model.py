@@ -149,19 +149,70 @@ def kospi_pbr() -> dict:
             "intraday": int((now.hour, now.minute) < (15, 40) and now.weekday() < 5)}
 
 
+PBR_COLS = ["date", "pbr", "source", "coverage", "n_stocks", "time_kst", "intraday"]
+
+
+def krx_pbr(hist: pd.DataFrame) -> pd.DataFrame | None:
+    """KRX 공식 코스피 PBR (정보데이터시스템, 로그인 필요).
+
+    환경변수 KRX_ID / KRX_PW가 있을 때만 pykrx로 받는다. 처음에는 2000년부터 전부,
+    그 뒤로는 마지막 KRX 기록 10일 전부터만 받아 덮어쓴다.
+    """
+    import os
+    if not (os.environ.get("KRX_ID") and os.environ.get("KRX_PW")):
+        print("  KRX_ID/KRX_PW가 없어 KRX 공식 PBR은 건너뜀")
+        return None
+    try:
+        from pykrx import stock
+    except ImportError:
+        print("  pykrx가 설치돼 있지 않아 KRX 공식 PBR은 건너뜀 (pip install pykrx)")
+        return None
+    krx_dates = pd.to_datetime(hist.loc[hist["source"] == "KRX", "date"])
+    start = (krx_dates.max() - pd.Timedelta(days=10)) if len(krx_dates) else pd.Timestamp(START)
+    end = pd.Timestamp.now(tz="Asia/Seoul").tz_localize(None).normalize()
+    frames, a = [], start
+    while a <= end:  # KRX는 한 번에 긴 기간을 주지 않을 수 있어 1년씩 나눠 받는다
+        b = min(a + pd.Timedelta(days=364), end)
+        df = stock.get_index_fundamental(a.strftime("%Y%m%d"), b.strftime("%Y%m%d"), "1001")
+        if df is not None and len(df) and "PBR" in df:
+            frames.append(df[["PBR"]])
+        a = b + pd.Timedelta(days=1)
+        time.sleep(0.5)
+    if not frames:
+        raise RuntimeError("KRX에서 PBR을 하나도 받지 못함 (로그인 실패 또는 응답 형식 변경)")
+    df = pd.concat(frames)
+    df = df[df["PBR"] > 0]
+    out = pd.DataFrame({"date": pd.to_datetime(df.index).strftime("%Y-%m-%d"), "pbr": df["PBR"].round(3).values})
+    out["source"], out["intraday"] = "KRX", 0
+    print(f"  KRX 공식 PBR {len(out)}일치 ({out['date'].iloc[0]} ~ {out['date'].iloc[-1]})")
+    return out
+
+
 def update_pbr_history() -> pd.DataFrame:
-    hist = pd.read_csv(PBR_FILE) if PBR_FILE.exists() else pd.DataFrame(columns=["date", "pbr", "coverage", "n_stocks", "time_kst", "intraday"])
-    print("코스피 PBR 추정 (네이버 종목별 PBR)")
+    """pbr_history.csv 갱신. 같은 날짜는 KRX 공식 값이 네이버 추정치보다 우선."""
+    hist = pd.read_csv(PBR_FILE, dtype={"date": str}) if PBR_FILE.exists() else pd.DataFrame(columns=PBR_COLS)
+    if "source" not in hist:
+        hist["source"] = "naver_est"
+    hist["source"] = hist["source"].fillna("naver_est")
+    print("코스피 PBR")
+    try:
+        k = krx_pbr(hist)
+        if k is not None:
+            hist = pd.concat([hist[~hist["date"].isin(k["date"])], k], ignore_index=True)
+    except Exception as e:  # noqa: BLE001
+        print("  KRX 공식 PBR 실패, 이전 기록 유지:", e)
     try:
         row = kospi_pbr()
         if row["coverage"] < 0.8:
             raise RuntimeError(f"시가총액 커버리지가 {row['coverage']:.0%}로 낮아 저장하지 않음")
-        hist = pd.concat([hist[hist["date"] != row["date"]], pd.DataFrame([row])], ignore_index=True)
-        hist = hist.sort_values("date")
-        hist.to_csv(PBR_FILE, index=False)
-        print(f"  PBR {row['pbr']} (보통주 {row['n_stocks']}종목, 시총 {row['coverage']:.1%})")
+        row["source"] = "naver_est"
+        if not ((hist["date"] == row["date"]) & (hist["source"] == "KRX")).any():
+            hist = pd.concat([hist[hist["date"] != row["date"]], pd.DataFrame([row])], ignore_index=True)
+        print(f"  네이버 추정 PBR {row['pbr']} (보통주 {row['n_stocks']}종목, 시총 {row['coverage']:.1%})")
     except Exception as e:  # noqa: BLE001
-        print("  PBR 계산 실패, 이전 기록 유지:", e)
+        print("  네이버 추정 PBR 실패:", e)
+    hist = hist.reindex(columns=PBR_COLS).sort_values("date").reset_index(drop=True)
+    hist.to_csv(PBR_FILE, index=False)
     return hist
 
 
@@ -312,8 +363,11 @@ def write_report(df: pd.DataFrame, eps: list[dict], notes: dict, pbr: pd.DataFra
          f"- 판정: **{last['state']}** (체크 항목 {int(last['conditions_met'])} / {int(last['conditions_known'])} 충족)"]
     if pbr is not None and len(pbr):
         p = pbr.iloc[-1]
-        when = f"{p['date']} {p['time_kst']}" + (" 장중" if int(p["intraday"]) else "")
-        L.append(f"- 코스피 PBR(추정): **{float(p['pbr']):.2f}배** ({when} 기준, 보통주 {int(p['n_stocks'])}종목·시가총액 {float(p['coverage']):.0%} 반영). 판정에는 쓰지 않는 참고 지표")
+        when = f"{p['date']} {p['time_kst'] if isinstance(p['time_kst'], str) else ''}".strip() + (" 장중" if int(p["intraday"]) else "")
+        if p["source"] == "KRX":
+            L.append(f"- 코스피 PBR: **{float(p['pbr']):.2f}배** ({p['date']} KRX 공식). 판정에는 쓰지 않는 참고 지표")
+        else:
+            L.append(f"- 코스피 PBR(추정): **{float(p['pbr']):.2f}배** ({when} 기준, 네이버 종목별 PBR로 계산, 보통주 {int(p['n_stocks'])}종목·시가총액 {float(p['coverage']):.0%} 반영). 판정에는 쓰지 않는 참고 지표")
     L.append("")
     L += ["| 항목 | 상태 | 기준 |", "|---|---|---|"]
     rule = {"credit_ok": "스프레드가 20일 평균보다 낮고 60일 고점의 0.9배 이하",
@@ -377,8 +431,8 @@ def write_report(df: pd.DataFrame, eps: list[dict], notes: dict, pbr: pd.DataFra
           "- 긴축: 미국 2년물 국채금리(FRED DGS2)",
           "- 변동성: VKOSPI 대신 코스피 20일 실현변동성(연율화)",
           "- 미국 지표는 한국 장 마감 후 발표되므로 하루 늦춰 반영",
-          "- PBR: 네이버 증권 종목별 시가총액·PBR로 계산한 추정치(시가총액 합 ÷ 순자산 합, 보통주만, 자본잠식 종목 제외). "
-          "KRX 공식 지수 PBR과 기준 시점·산식이 달라 차이가 날 수 있고, 매일 실행될 때부터 기록이 쌓임", "",
+          "- PBR: KRX 정보데이터시스템 공식 코스피 PBR(로그인 필요, KRX_ID/KRX_PW 설정 시). 그날 KRX 값이 아직 없으면 "
+          "네이버 증권 종목별 시가총액·PBR로 계산한 추정치(시가총액 합 ÷ 순자산 합, 보통주만)를 쓰고, 다음 실행 때 공식 값으로 바뀜", "",
           "## 한계", "",
           "- 이익(EPS) 바닥, VKOSPI, ADR, 국내 회사채 스프레드는 무료 공개 소스가 없어 빠져 있습니다. PBR은 참고용으로만 표시하고 판정에는 넣지 않았습니다.",
           "- 임계값(연속 일수, 0.9배, 0.7배 등)은 검증 전 초기값입니다. 결과에 맞춰 조정하면 과적합이 됩니다.",
@@ -403,7 +457,7 @@ def main() -> int:
         out[c] = out[c].astype("Int64")
     pbr = update_pbr_history()
     if len(pbr):
-        closed = pbr[pbr["intraday"].astype(int) == 0]
+        closed = pbr[pbr["intraday"].fillna(0).astype(int) == 0]
         out["pbr"] = closed.set_index(pd.to_datetime(closed["date"]))["pbr"].reindex(out.index)
     out.round(3).to_csv(OUT / "signals_daily.csv", date_format="%Y-%m-%d")
     df[["kospi"]].rename_axis("date").round(2).to_csv(OUT / "kospi_history.csv", date_format="%Y-%m-%d")
