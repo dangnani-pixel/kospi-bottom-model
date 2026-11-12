@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>코스피 바닥 신호판</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<style>
+/* Layout: one working column — status strip on top, chart + condition rows in the middle, report below. */
+:root {
+  --bg: #F3F5F8;
+  --panel: #FFFFFF;
+  --ink: #18212E;
+  --muted: #5E6B7D;
+  --line: #D9DEE6;
+  --faint: #EBEEF3;
+  --accent: #2F5BD3;
+  --price: #18212E;
+  --st-fall: #D2443A;
+  --st-bounce: #C98512;
+  --st-check: #1F8A70;
+  --st-recover: #2F5BD3;
+  --on: #1F8A70;
+  --off: #E3E7ED;
+  --band-alpha: .13;
+  --f-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "Consolas", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #10151D; --panel: #171E28; --ink: #E4E9F0; --muted: #94A0B2; --line: #2A3442; --faint: #1E2633;
+  --accent: #7C9BFF; --price: #E4E9F0; --st-fall: #F0695F; --st-bounce: #E3A43A; --st-check: #3FC29C; --st-recover: #7C9BFF;
+  --on: #3FC29C; --off: #283140; --band-alpha: .17; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #10151D; --panel: #171E28; --ink: #E4E9F0; --muted: #94A0B2; --line: #2A3442; --faint: #1E2633;
+  --accent: #7C9BFF; --price: #E4E9F0; --st-fall: #F0695F; --st-bounce: #E3A43A; --st-check: #3FC29C; --st-recover: #7C9BFF;
+  --on: #3FC29C; --off: #283140; --band-alpha: .17; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.6; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 28px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 20px; }
+header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; justify-content: space-between; }
+h1 { font-size: 1.6rem; line-height: 1.25; margin: 0; letter-spacing: -.01em; text-wrap: balance; }
+.sub { margin: 4px 0 0; color: var(--muted); font-size: .9rem; }
+.loader { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn { font: 500 .88rem var(--f-body); border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  padding: 7px 14px; border-radius: 6px; cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.btn:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.source { font-size: .82rem; color: var(--muted); }
+.source b { color: var(--ink); font-weight: 600; }
+.sample-flag { display: inline-block; font-size: .75rem; font-weight: 600; letter-spacing: .03em; color: var(--st-bounce);
+  border: 1px solid var(--st-bounce); border-radius: 4px; padding: 0 6px; margin-left: 6px; }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; min-width: 0; }
+.status { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 2fr); gap: 20px; }
+@media (max-width: 720px) { .status { grid-template-columns: 1fr; } }
+.label { font-size: .74rem; font-weight: 600; letter-spacing: .06em; color: var(--muted); text-transform: uppercase; margin: 0 0 6px; }
+.big { font: 500 1.9rem/1.1 var(--f-mono); font-variant-numeric: tabular-nums; }
+.meta { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; }
+.state-chip { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1.05rem; padding: 4px 12px 4px 10px;
+  border-radius: 999px; border: 1.5px solid currentColor; margin-top: 10px; }
+.state-chip::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
+.conds { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.cond { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; background: var(--faint); font-size: .9rem; }
+.cond .dot { width: 18px; height: 18px; border-radius: 4px; flex: none; display: grid; place-items: center; font: 600 .72rem var(--f-mono); }
+.cond.on .dot { background: var(--on); color: var(--panel); }
+.cond.off .dot { background: var(--off); color: var(--muted); }
+.cond.na { opacity: .55; }
+.cond-count { font: 500 .9rem var(--f-mono); color: var(--muted); }
+
+.chart-head { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { font: 500 .82rem var(--f-mono); border: 0; background: transparent; color: var(--muted); padding: 5px 11px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.ctrls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: .85rem; color: var(--muted); }
+select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+.chart { position: relative; width: 100%; touch-action: pan-y; }
+.chart svg { display: block; max-width: 100%; }
+.chart text { font-family: var(--f-mono); font-size: 11px; fill: var(--muted); }
+.chart .cname { font-family: var(--f-body); font-size: 11.5px; fill: var(--ink); }
+.tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 10px; font-size: .8rem; line-height: 1.45; box-shadow: 0 6px 18px rgba(0,0,0,.12); min-width: 170px; z-index: 2; }
+.tip .d { font: 500 .8rem var(--f-mono); color: var(--muted); }
+.tip .p { font: 600 1rem var(--f-mono); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .8rem; color: var(--muted); margin-top: 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 10px; border-radius: 2px; display: inline-block; }
+
+.report { min-width: 0; }
+.report h1 { font-size: 1.3rem; margin: 0 0 10px; }
+.report h2 { font-size: 1.1rem; margin: 26px 0 8px; padding-top: 14px; border-top: 1px solid var(--line); }
+.report h3 { font-size: 1rem; margin: 18px 0 6px; }
+.report p, .report li { max-width: 72ch; }
+.report code { font-family: var(--f-mono); font-size: .86em; background: var(--faint); padding: 1px 5px; border-radius: 4px; }
+.report pre { background: var(--faint); padding: 12px; border-radius: 6px; overflow-x: auto; }
+.report pre code { background: none; padding: 0; }
+.tbl { overflow-x: auto; margin: 10px 0; }
+.report table { border-collapse: collapse; font-size: .86rem; font-variant-numeric: tabular-nums; min-width: 100%; }
+.report th, .report td { border-bottom: 1px solid var(--line); padding: 6px 10px; text-align: left; white-space: nowrap; }
+.report th { color: var(--muted); font-weight: 600; font-size: .78rem; letter-spacing: .02em; border-bottom: 2px solid var(--ink); }
+.empty { color: var(--muted); font-size: .9rem; }
+.drop { position: fixed; inset: 0; background: color-mix(in srgb, var(--accent) 14%, transparent); border: 3px dashed var(--accent);
+  display: grid; place-items: center; font-weight: 700; font-size: 1.2rem; color: var(--accent); z-index: 20; }
+.foot { color: var(--muted); font-size: .8rem; max-width: 80ch; }
+.err { color: var(--st-fall); font-size: .85rem; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>코스피 바닥 신호판</h1>
+      <p class="sub">kospi_bottom_model.py 결과(signals_daily.csv, report.md)를 그래프와 표로 봅니다. 파일은 브라우저 안에서만 읽고 어디에도 올라가지 않습니다.</p>
+    </div>
+    <div class="loader">
+      <input type="file" id="files" accept=".csv,.md,.txt" multiple hidden>
+      <button class="btn primary" id="pick" type="button">결과 파일 열기</button>
+      <button class="btn" id="sampleBtn" type="button">예시 데이터</button>
+    </div>
+  </header>
+  <div class="source" id="source"></div>
+  <div class="err" id="err" hidden></div>
+
+  <section class="status">
+    <div class="panel">
+      <p class="label">최근 판정</p>
+      <div class="big" id="lastPrice">–</div>
+      <div class="meta" id="lastDate">–</div>
+      <div id="stateChip"></div>
+      <div class="meta" id="stateDur" style="margin-top:6px"></div>
+    </div>
+    <div class="panel">
+      <p class="label">체크 항목 <span class="cond-count" id="condCount"></span></p>
+      <div class="conds" id="conds"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="chart-head">
+      <p class="label" style="margin:0">지수와 판정 구간</p>
+      <div class="ctrls">
+        <div class="seg" id="ranges">
+          <button type="button" data-y="1">1년</button>
+          <button type="button" data-y="3">3년</button>
+          <button type="button" data-y="10">10년</button>
+          <button type="button" data-y="0" aria-pressed="true">전체</button>
+        </div>
+        <label for="overlay">보조선</label>
+        <select id="overlay"><option value="">없음</option></select>
+      </div>
+    </div>
+    <div class="chart" id="chart"></div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <section class="panel report" id="report"><p class="empty">report.md를 열면 여기에 표시됩니다.</p></section>
+
+  <p class="foot">참고용 시각화입니다. 매수·매도 판단이나 투자 자문이 아니며, 표시되는 판정은 모델 스크립트가 계산한 값을 그대로 옮긴 것입니다. 로컬에서 쓸 때는 이 파일을 스크립트 폴더에 두고 <code>python -m http.server</code>로 열면 두 결과 파일을 자동으로 불러옵니다.</p>
+</div>
+<div class="drop" id="drop" hidden>여기에 놓으면 불러옵니다</div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+  // ---------- known names ----------
+  const COND_LABELS = [
+    [/credit|hy|spread|신용/i, '신용 안정'],
+    [/fx|krw|usd|외환|환율/i, '외환 안정'],
+    [/tight|rate|2y|dgs2|긴축|금리/i, '긴축 둔화'],
+    [/ma|sma|moving|이동평균|6m/i, '6개월선 회복'],
+    [/vol|vkospi|변동성/i, '변동성 진정'],
+    [/eps|earn|이익/i, '이익 바닥'],
+    [/pbr/i, 'PBR 저평가'],
+    [/adr|breadth|등락/i, 'ADR 반등'],
+    [/aa|corp|회사채/i, '국내 신용 안정'],
+  ];
+  function condLabel(c) {
+    for (const [re, l] of COND_LABELS) if (re.test(c)) return l;
+    return c;
+  }
+  const STATES = [
+    { key: 'fall', re: /하락|fall|declin|down|bear/i, label: '하락 진행', v: '--st-fall' },
+    { key: 'bounce', re: /반등|bounce|rebound|relief/i, label: '단기 반등 가능', v: '--st-bounce' },
+    { key: 'check', re: /바닥|bottom|confirm|check/i, label: '바닥 확인 중', v: '--st-check' },
+    { key: 'recover', re: /회복|recover|bull|up/i, label: '회복', v: '--st-recover' },
+  ];
+  function stateOf(s) {
+    if (s == null || s === '') return null;
+    for (const st of STATES) if (st.re.test(s)) return st;
+    return { key: 'other:' + s, label: s, v: '--muted' };
+  }
+
+  // ---------- CSV ----------
+  function parseCSV(text) {
+    text = text.replace(/^﻿/, '');
+    const rows = []; let row = [], f = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (q) {
+        if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; }
+        else f += c;
+      } else if (c === '"') q = true;
+      else if (c === ',') { row.push(f); f = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (c === '\r' && text[i + 1] === '\n') i++;
+        row.push(f); f = ''; if (row.some((x) => x !== '')) rows.push(row); row = [];
+      } else f += c;
+    }
+    row.push(f); if (row.some((x) => x !== '')) rows.push(row);
+    return rows;
+  }
+  function parseDate(s) {
+    s = String(s).trim();
+    let m = s.match(/^(\d{4})[-./]?(\d{2})[-./]?(\d{2})/);
+    if (!m) return null;
+    const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+    return isNaN(d) ? null : d;
+  }
+  const BOOL_T = new Set(['1', '1.0', 'true', 'True', 'TRUE']);
+  const BOOL_F = new Set(['0', '0.0', 'false', 'False', 'FALSE']);
+
+  function buildModel(text) {
+    const rows = parseCSV(text);
+    if (rows.length < 3) throw new Error('CSV에 데이터 행이 거의 없습니다. signals_daily.csv가 맞는지 확인해 주세요.');
+    const head = rows[0].map((h) => h.trim());
+    const body = rows.slice(1);
+    let dIdx = head.findIndex((h) => /^(date|날짜|일자|time)$/i.test(h));
+    if (dIdx < 0) dIdx = head.findIndex((_, i) => body.slice(0, 20).every((r) => parseDate(r[i])));
+    if (dIdx < 0) throw new Error('날짜 열을 찾지 못했습니다. 첫 줄에 date 열이 있어야 합니다.');
+
+    const cols = head.map((name, i) => {
+      if (i === dIdx) return null;
+      const vals = body.map((r) => (r[i] ?? '').trim());
+      const filled = vals.filter((v) => v !== '' && v.toLowerCase() !== 'nan');
+      if (!filled.length) return { name, kind: 'empty' };
+      if (filled.every((v) => BOOL_T.has(v) || BOOL_F.has(v)))
+        return { name, kind: 'bool', vals: vals.map((v) => BOOL_T.has(v) ? 1 : BOOL_F.has(v) ? 0 : null) };
+      const nums = vals.map((v) => (v === '' ? NaN : Number(v)));
+      if (filled.every((v) => !isNaN(Number(v)))) return { name, kind: 'num', vals: nums.map((n) => (isNaN(n) ? null : n)) };
+      return { name, kind: 'text', vals };
+    }).filter(Boolean);
+
+    const dates = body.map((r) => parseDate(r[dIdx]));
+    const keep = dates.map((d, i) => (d ? i : -1)).filter((i) => i >= 0);
+    const pick = (arr) => keep.map((i) => arr[i]);
+    cols.forEach((c) => { if (c.vals) c.vals = pick(c.vals); });
+
+    const nums = cols.filter((c) => c.kind === 'num');
+    const price = nums.find((c) => /kospi|close|종가|지수|price/i.test(c.name)) || nums[0];
+    if (!price) throw new Error('지수(종가) 숫자 열을 찾지 못했습니다.');
+    const texts = cols.filter((c) => c.kind === 'text');
+    const state = texts.find((c) => /state|phase|regime|판정|단계|signal/i.test(c.name)) ||
+      texts.find((c) => new Set(c.vals).size <= 8);
+    const conds = cols.filter((c) => c.kind === 'bool' && !/state|판정/i.test(c.name));
+    const others = nums.filter((c) => c !== price);
+    return { dates: pick(dates), price, state, conds, others, n: keep.length };
+  }
+
+  // ---------- state ----------
+  let M = null, years = 0, overlay = '', reportMd = '', sourceDesc = '';
+
+  function fmtD(d) { return d ? d.toISOString().slice(0, 10) : '–'; }
+  function fmtN(v, dp = 2) { return v == null ? '–' : v.toLocaleString('ko-KR', { minimumFractionDigits: dp, maximumFractionDigits: dp }); }
+
+  function renderStatus() {
+    const n = M.n, i = n - 1;
+    $('lastPrice').textContent = fmtN(M.price.vals[i]);
+    $('lastDate').textContent = fmtD(M.dates[i]) + ' 기준 · ' + M.price.name;
+    const chip = $('stateChip'); chip.innerHTML = '';
+    if (M.state) {
+      const st = stateOf(M.state.vals[i]);
+      if (st) {
+        const s = document.createElement('span'); s.className = 'state-chip';
+        s.style.color = css(st.v); s.textContent = M.state.vals[i];
+        chip.appendChild(s);
+        let k = i; while (k > 0 && M.state.vals[k - 1] === M.state.vals[i]) k--;
+        $('stateDur').textContent = fmtD(M.dates[k]) + '부터 ' + (i - k + 1) + '거래일째';
+      }
+    } else { chip.innerHTML = '<p class="empty">CSV에 판정(state) 열이 없습니다.</p>'; $('stateDur').textContent = ''; }
+
+    const box = $('conds'); box.innerHTML = '';
+    let on = 0, have = 0;
+    M.conds.forEach((c) => {
+      const v = c.vals[i];
+      const d = document.createElement('div');
+      d.className = 'cond ' + (v === 1 ? 'on' : v === 0 ? 'off' : 'na');
+      d.title = c.name;
+      d.innerHTML = '<span class="dot">' + (v === 1 ? '✓' : v === 0 ? '–' : '?') + '</span><span></span>';
+      d.lastChild.textContent = condLabel(c.name);
+      box.appendChild(d);
+      if (v != null) { have++; if (v === 1) on++; }
+    });
+    $('condCount').textContent = M.conds.length ? on + ' / ' + have + ' 충족' : '';
+    if (!M.conds.length) box.innerHTML = '<p class="empty">0/1로 된 조건 열을 찾지 못했습니다.</p>';
+  }
+
+  function viewRange() {
+    if (!years) return [0, M.n];
+    const end = M.dates[M.n - 1].getTime(), from = end - years * 365.25 * 864e5;
+    let s = 0; while (s < M.n - 1 && M.dates[s].getTime() < from) s++;
+    return [s, M.n];
+  }
+
+  function renderChart() {
+    const host = $('chart');
+    const W = Math.max(300, host.clientWidth);
+    const narrow = W < 560;
+    const L = narrow ? 84 : 104, R = overlay ? 52 : 14, T = 10;
+    const PH = narrow ? 230 : 300, rowH = 15, gap = 4;
+    const nC = M.conds.length;
+    const stripTop = T + PH + 44;
+    const H = stripTop + nC * (rowH + gap) + 6;
+    const [s, e] = viewRange();
+    const cnt = e - s;
+    const x = (i) => L + ((i - s) / Math.max(1, cnt - 1)) * (W - L - R);
+    let lo = Infinity, hi = -Infinity;
+    for (let i = s; i < e; i++) { const v = M.price.vals[i]; if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }
+    const pad = (hi - lo) * .06 || 1; lo -= pad; hi += pad;
+    const y = (v) => T + (1 - (v - lo) / (hi - lo)) * PH;
+    const NS = 'http://www.w3.org/2000/svg';
+    const parts = [];
+
+    // state bands
+    if (M.state) {
+      let i = s;
+      while (i < e) {
+        let j = i; const sv = M.state.vals[i];
+        while (j + 1 < e && M.state.vals[j + 1] === sv) j++;
+        const st = stateOf(sv);
+        if (st) {
+          const x0 = x(i) - (i > s ? (x(i) - x(i - 1)) / 2 : 0), x1 = j + 1 < e ? (x(j) + x(j + 1)) / 2 : x(j);
+          parts.push(`<rect x="${x0.toFixed(1)}" y="${T}" width="${Math.max(.6, x1 - x0).toFixed(1)}" height="${PH}" fill="${css(st.v)}" fill-opacity="${css('--band-alpha')}"/>`);
+        }
+        i = j + 1;
+      }
+    }
+    // y grid
+    const step = niceStep((hi - lo) / 5);
+    for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) {
+      parts.push(`<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="${css('--line')}" stroke-width="1"/>`);
+      parts.push(`<text x="${L - 6}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end">${Math.round(v).toLocaleString('ko-KR')}</text>`);
+    }
+    // x ticks
+    const spanY = (M.dates[e - 1] - M.dates[s]) / (365.25 * 864e5);
+    const every = spanY > 14 ? 4 : spanY > 7 ? 2 : spanY > 2 ? 1 : 0;
+    let lastX = -99;
+    for (let i = s + 1; i < e; i++) {
+      const a = M.dates[i - 1], b = M.dates[i];
+      let lab = null;
+      if (every && b.getUTCFullYear() !== a.getUTCFullYear() && b.getUTCFullYear() % every === 0) lab = String(b.getUTCFullYear());
+      if (!every && b.getUTCMonth() !== a.getUTCMonth() && b.getUTCMonth() % 3 === 0) lab = b.getUTCFullYear() + '.' + String(b.getUTCMonth() + 1).padStart(2, '0');
+      if (lab && x(i) - lastX > 44) {
+        parts.push(`<line x1="${x(i).toFixed(1)}" x2="${x(i).toFixed(1)}" y1="${T}" y2="${T + PH}" stroke="${css('--line')}" stroke-dasharray="2 3"/>`);
+        parts.push(`<text x="${x(i).toFixed(1)}" y="${T + PH + 16}" text-anchor="middle">${lab}</text>`);
+        lastX = x(i);
+      }
+    }
+    // overlay
+    const ov = overlay && M.others.find((c) => c.name === overlay);
+    if (ov) {
+      let a = Infinity, b = -Infinity;
+      for (let i = s; i < e; i++) { const v = ov.vals[i]; if (v != null) { a = Math.min(a, v); b = Math.max(b, v); } }
+      if (isFinite(a)) {
+        const p = (b - a) * .06 || 1; a -= p; b += p;
+        const y2 = (v) => T + (1 - (v - a) / (b - a)) * PH;
+        parts.push(`<path d="${pathOf(ov.vals, s, e, x, y2)}" fill="none" stroke="${css('--accent')}" stroke-width="1.3" stroke-dasharray="4 3" stroke-opacity=".9"/>`);
+        [a + p, b - p].forEach((v) => parts.push(`<text x="${W - R + 6}" y="${(y2(v) + 4).toFixed(1)}" style="fill:${css('--accent')}">${fmtShort(v)}</text>`));
+      }
+    }
+    // price
+    parts.push(`<path d="${pathOf(M.price.vals, s, e, x, y)}" fill="none" stroke="${css('--price')}" stroke-width="1.6" stroke-linejoin="round"/>`);
+    const li = e - 1;
+    if (M.price.vals[li] != null) parts.push(`<circle cx="${x(li).toFixed(1)}" cy="${y(M.price.vals[li]).toFixed(1)}" r="3.5" fill="${css('--price')}"/>`);
+
+    // condition strips
+    M.conds.forEach((c, k) => {
+      const yy = stripTop + k * (rowH + gap);
+      parts.push(`<text class="cname" x="${L - 8}" y="${yy + rowH - 3.5}" text-anchor="end">${esc(condLabel(c.name))}</text>`);
+      parts.push(`<rect x="${L}" y="${yy}" width="${W - L - R}" height="${rowH}" fill="${css('--off')}" rx="2"/>`);
+      let i = s;
+      while (i < e) {
+        if (c.vals[i] !== 1) { i++; continue; }
+        let j = i; while (j + 1 < e && c.vals[j + 1] === 1) j++;
+        const x0 = x(i), x1 = j + 1 < e ? x(j + 1) : x(j) + 1;
+        parts.push(`<rect x="${x0.toFixed(1)}" y="${yy}" width="${Math.max(1, x1 - x0).toFixed(1)}" height="${rowH}" fill="${css('--on')}"/>`);
+        i = j + 1;
+      }
+    });
+    if (nC) parts.push(`<text x="${L}" y="${stripTop - 6}" style="font-family:var(--f-body)">체크 항목 충족 구간</text>`);
+    parts.push(`<line id="cross" x1="0" x2="0" y1="${T}" y2="${H - 6}" stroke="${css('--muted')}" stroke-width="1" visibility="hidden"/>`);
+
+    host.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="${NS}" role="img" aria-label="${esc(M.price.name)} 추이와 판정 구간">${parts.join('')}</svg><div class="tip" id="tip" hidden></div>`;
+    const svg = host.firstChild, cross = svg.querySelector('#cross'), tip = $('tip');
+    const move = (ev) => {
+      const r = svg.getBoundingClientRect();
+      const px = (ev.clientX - r.left) * (W / r.width);
+      if (px < L || px > W - R) { hide(); return; }
+      const i = Math.round(s + ((px - L) / (W - L - R)) * (cnt - 1));
+      const xi = x(i);
+      cross.setAttribute('x1', xi); cross.setAttribute('x2', xi); cross.setAttribute('visibility', 'visible');
+      let h = `<div class="d">${fmtD(M.dates[i])}</div><div class="p">${fmtN(M.price.vals[i])}</div>`;
+      if (M.state) { const st = stateOf(M.state.vals[i]); if (st) h += `<div style="color:${css(st.v)};font-weight:700">${esc(M.state.vals[i])}</div>`; }
+      if (ov) h += `<div style="color:${css('--accent')}">${esc(ov.name)}: ${fmtShort(ov.vals[i])}</div>`;
+      if (M.conds.length) h += '<div style="margin-top:4px">' + M.conds.map((c) => `${c.vals[i] === 1 ? '✓' : c.vals[i] === 0 ? '·' : '?'} ${esc(condLabel(c.name))}`).join('<br>') + '</div>';
+      tip.innerHTML = h; tip.hidden = false;
+      const sx = xi * (r.width / W), tw = tip.offsetWidth;
+      tip.style.left = (sx + 14 + tw > r.width ? sx - tw - 14 : sx + 14) + 'px';
+      tip.style.top = '8px';
+    };
+    const hide = () => { cross.setAttribute('visibility', 'hidden'); tip.hidden = true; };
+    svg.addEventListener('pointermove', move);
+    svg.addEventListener('pointerdown', move);
+    svg.addEventListener('pointerleave', hide);
+
+    // legend
+    const lg = $('legend'); lg.innerHTML = '';
+    const seen = new Set((M.state ? M.state.vals : []).filter(Boolean));
+    const add = (color, text, alpha) => { const sp = document.createElement('span'); sp.innerHTML = `<i style="background:${color};opacity:${alpha}"></i>`; sp.append(text); lg.appendChild(sp); };
+    STATES.forEach((st) => { const hit = [...seen].find((v) => st.re.test(v)); if (hit) add(css(st.v), hit, .55); });
+    if (nC) add(css('--on'), '조건 충족', 1);
+  }
+
+  function pathOf(vals, s, e, x, y) {
+    let d = '', pen = false;
+    for (let i = s; i < e; i++) {
+      const v = vals[i];
+      if (v == null) { pen = false; continue; }
+      d += (pen ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1);
+      pen = true;
+    }
+    return d;
+  }
+  function niceStep(raw) { const p = Math.pow(10, Math.floor(Math.log10(raw))); const f = raw / p; return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * p; }
+  function fmtShort(v) { if (v == null) return '–'; const a = Math.abs(v); return a >= 1000 ? Math.round(v).toLocaleString('ko-KR') : a >= 10 ? v.toFixed(1) : v.toFixed(2); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+  function renderOverlayOptions() {
+    const sel = $('overlay');
+    sel.innerHTML = '<option value="">없음</option>' + M.others.map((c) => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('');
+    if (!M.others.some((c) => c.name === overlay)) overlay = '';
+    sel.value = overlay;
+  }
+
+  function renderReport() {
+    const box = $('report');
+    if (!reportMd) { box.innerHTML = '<p class="empty">report.md를 열면 여기에 표시됩니다.</p>'; return; }
+    if (window.marked) {
+      box.innerHTML = marked.parse(reportMd);
+      box.querySelectorAll('table').forEach((t) => { const w = document.createElement('div'); w.className = 'tbl'; t.replaceWith(w); w.appendChild(t); });
+    } else {
+      const pre = document.createElement('pre'); pre.textContent = reportMd; box.replaceChildren(pre);
+    }
+  }
+
+  function renderAll() {
+    $('source').innerHTML = sourceDesc;
+    if (!M) return;
+    renderStatus(); renderOverlayOptions(); renderChart(); renderReport();
+  }
+
+  function showErr(msg) { const e = $('err'); e.textContent = msg; e.hidden = !msg; }
+
+  // ---------- loading ----------
+  async function loadFiles(list) {
+    showErr('');
+    let csvName = '', mdName = '';
+    for (const f of list) {
+      const t = await f.text();
+      if (/\.csv$/i.test(f.name)) {
+        try { M = buildModel(t); csvName = f.name; } catch (e) { showErr(f.name + ': ' + e.message); return; }
+      } else if (/\.(md|txt)$/i.test(f.name)) { reportMd = t; mdName = f.name; }
+    }
+    if (csvName && !mdName) reportMd = reportMd && sourceDesc.includes('예시') ? '' : reportMd;
+    if (!csvName && !M) { showErr('signals_daily.csv도 함께 열어 주세요.'); renderReport(); return; }
+    sourceDesc = '불러온 파일: <b>' + esc([csvName, mdName].filter(Boolean).join(', ')) + '</b>' + (M ? ` · ${M.n.toLocaleString('ko-KR')}거래일 · ${fmtD(M.dates[0])} ~ ${fmtD(M.dates[M.n - 1])}` : '');
+    renderAll();
+  }
+
+  $('pick').addEventListener('click', () => $('files').click());
+  $('files').addEventListener('change', (e) => { if (e.target.files.length) loadFiles([...e.target.files]); e.target.value = ''; });
+  $('sampleBtn').addEventListener('click', loadSample);
+  let dragDepth = 0;
+  addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth++; $('drop').hidden = false; });
+  addEventListener('dragover', (e) => e.preventDefault());
+  addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('drop').hidden = true; } });
+  addEventListener('drop', (e) => { e.preventDefault(); dragDepth = 0; $('drop').hidden = true; if (e.dataTransfer.files.length) loadFiles([...e.dataTransfer.files]); });
+
+  $('ranges').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    years = +b.dataset.y;
+    $('ranges').querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', x === b));
+    if (M) renderChart();
+  });
+  $('overlay').addEventListener('change', (e) => { overlay = e.target.value; if (M) renderChart(); });
+  let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => M && renderChart(), 120); });
+  try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => M && renderAll()); } catch (_) {}
+  new MutationObserver(() => M && renderAll()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  // ---------- sample (synthetic) ----------
+  function loadSample() {
+    let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const gauss = () => Math.sqrt(-2 * Math.log(rnd() + 1e-9)) * Math.cos(2 * Math.PI * rnd());
+    const out = ['date,kospi,hy_spread,credit_ok,fx_ok,tightening_ok,ma6m_ok,vol_ok,state'];
+    let p = 2000, hy = 4, d = new Date(Date.UTC(2017, 0, 2));
+    const closes = [];
+    const shocks = [[2018.8, 2019.0, -.0016], [2020.1, 2020.25, -.009], [2021.5, 2022.75, -.0012], [2024.6, 2024.95, -.0011], [2026.55, 2026.75, -.0022]];
+    while (d < new Date(Date.UTC(2026, 10, 11))) {
+      if (d.getUTCDay() % 6 !== 0) {
+        const yf = d.getUTCFullYear() + d.getUTCMonth() / 12 + d.getUTCDate() / 365;
+        const sh = shocks.find(([a, b]) => yf >= a && yf < b);
+        const drift = sh ? sh[2] : .00045;
+        const vol = sh ? .019 : .009;
+        const r = drift + vol * gauss();
+        p *= Math.exp(r); closes.push(p);
+        hy += (sh ? .03 : -.012) + .05 * gauss(); hy = Math.min(11, Math.max(2.8, hy));
+        const n = closes.length;
+        const ma = closes.slice(Math.max(0, n - 126)).reduce((a, b) => a + b, 0) / Math.min(n, 126);
+        const rv = n > 21 ? Math.sqrt(closes.slice(n - 21).reduce((a, c, i, arr) => i ? a + Math.log(c / arr[i - 1]) ** 2 : a, 0) / 20) : .01;
+        const credit = hy < 5 ? 1 : 0, fx = sh ? (rnd() < .15 ? 1 : 0) : (rnd() < .85 ? 1 : 0);
+        const tight = (yf > 2019.4 && yf < 2021.8) || yf > 2023.9 ? 1 : 0;
+        const maok = p > ma ? 1 : 0, volok = rv < .013 ? 1 : 0;
+        const sc = credit + fx + tight + maok + volok;
+        const peak = Math.max(...closes.slice(Math.max(0, n - 252)));
+        const dd = p / peak - 1;
+        let st = sc >= 4 && dd > -.1 ? '회복' : dd < -.12 && sc <= 1 ? '하락 진행' : dd < -.12 && sc <= 3 ? (maok ? '바닥 확인 중' : '단기 반등 가능') : sc >= 3 ? '회복' : '단기 반등 가능';
+        out.push([fmtD(d), p.toFixed(2), hy.toFixed(2), credit, fx, tight, maok, volok, st].join(','));
+      }
+      d = new Date(d.getTime() + 864e5);
+    }
+    M = buildModel(out.join('\n'));
+    reportMd = '# 예시 리포트 (가상 데이터)\n\n이 내용은 화면 구성을 보여 주기 위한 **가상 데이터**입니다. 실제 결과가 아닙니다. `결과 파일 열기`로 스크립트가 만든 `report.md`와 `signals_daily.csv`를 함께 열어 주세요.\n\n## 하락 구간별 신호 성적 (예시)\n\n| 구간 | 고점 대비 최대 하락 | 저점 | 헛신호 수 | 헛신호 후 추가 하락 | 저점 후 신호 지연 |\n|---|---:|---|---:|---:|---:|\n| 2020 코로나 | -35.7% | 2020-03-19 | 1 | -9.8% | 23일 |\n| 2022 긴축 | -31.2% | 2022-09-30 | 3 | -12.4% | 41일 |\n\n## 6개월 이동평균 단독 신호와 비교 (예시)\n\n- 헛신호: 모델 4회 / 이동평균 단독 9회\n- 평균 지연: 모델 32일 / 이동평균 단독 27일\n';
+    sourceDesc = '<b>예시 데이터</b><span class="sample-flag">가상</span> · 실제 시장 데이터가 아닙니다. 결과 파일을 열면 바뀝니다.';
+    renderAll();
+  }
+
+  // ---------- boot: try sibling files (works under python -m http.server), else sample ----------
+  (async () => {
+    try {
+      const r = await fetch('signals_daily.csv', { cache: 'no-store' });
+      if (!r.ok) throw 0;
+      const t = await r.text();
+      if (!/^﻿?[^\n]*,/.test(t) || /<html/i.test(t.slice(0, 200))) throw 0;
+      M = buildModel(t);
+      try { const r2 = await fetch('report.md', { cache: 'no-store' }); if (r2.ok) { const m = await r2.text(); if (!/<html/i.test(m.slice(0, 200))) reportMd = m; } } catch (_) {}
+      sourceDesc = '같은 폴더에서 자동으로 불러옴: <b>signals_daily.csv' + (reportMd ? ', report.md' : '') + '</b>' + ` · ${M.n.toLocaleString('ko-KR')}거래일 · ${fmtD(M.dates[0])} ~ ${fmtD(M.dates[M.n - 1])}`;
+      renderAll();
+    } catch (_) { loadSample(); }
+  })();
+})();
+</script>
+</body>
+</html>
