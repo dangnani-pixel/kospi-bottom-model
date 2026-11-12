@@ -32,6 +32,9 @@ MA_DAYS = 126        # 6개월 이동평균
 VOL_DAYS = 20        # 실현변동성 창
 VOL_RATIO = 0.7      # 변동성이 최근 60일 고점의 몇 배 이하이면 '진정'
 TIGHT_LAG = 63       # 2년물 금리를 몇 거래일 전과 비교할지 (약 3개월)
+PBR_WINDOW = 1250    # PBR 저평가 판단에 쓰는 과거 기간 (약 5년)
+PBR_MIN_DAYS = 250   # 이 기간보다 기록이 짧으면 PBR 항목은 '자료 없음'
+PBR_PCT = 0.2        # PBR이 과거 기간의 하위 20% 이하이면 '저평가'
 DD_EPISODE = -0.20   # 252일 고점 대비 이 이상 하락하면 하락 구간
 EPISODE_FROM = "2002-01-01"
 
@@ -258,8 +261,13 @@ def load() -> tuple[pd.DataFrame, dict]:
     return df, notes
 
 
-def build(df: pd.DataFrame) -> pd.DataFrame:
+COND_COLS = ["credit_ok", "fx_ok", "tightening_ok", "ma6m_ok", "vol_ok", "pbr_ok"]
+
+
+def build(df: pd.DataFrame, pbr: pd.Series | None = None) -> pd.DataFrame:
     px = df["kospi"]
+    # PBR: 장 마감 후 값만(KRX 공식 우선). 빠진 날은 최대 3거래일까지 직전 값으로 채움
+    df["pbr"] = pbr.reindex(df.index).ffill(limit=3) if pbr is not None else np.nan
     df["ma6m"] = px.rolling(MA_DAYS).mean()
     ret = np.log(px).diff()
     df["realized_vol"] = ret.rolling(VOL_DAYS).std() * np.sqrt(252) * 100
@@ -275,15 +283,19 @@ def build(df: pd.DataFrame) -> pd.DataFrame:
     raw["ma6m_ok"] = px > df["ma6m"]
     vol = df["realized_vol"]
     raw["vol_ok"] = vol <= vol.rolling(60).max() * VOL_RATIO
+    pb = df["pbr"]
+    pb_cut = pb.rolling(PBR_WINDOW, min_periods=PBR_MIN_DAYS).quantile(PBR_PCT)
+    raw["pbr_ok"] = pb <= pb_cut
+    df["pbr_cut"] = pb_cut
 
     for c in raw:
         valid = {"credit_ok": cs, "fx_ok": fx, "tightening_ok": df["ust2y"].shift(TIGHT_LAG),
-                 "ma6m_ok": df["ma6m"], "vol_ok": vol.rolling(60).max()}[c].notna()
+                 "ma6m_ok": df["ma6m"], "vol_ok": vol.rolling(60).max(), "pbr_ok": pb_cut}[c].notna()
         s = persist(raw[c]).astype("float64")
         s[~valid] = np.nan
         df[c] = s
 
-    conds = ["credit_ok", "fx_ok", "tightening_ok", "ma6m_ok", "vol_ok"]
+    conds = COND_COLS
     df["conditions_met"] = df[conds].sum(axis=1, min_count=1)
     df["conditions_known"] = df[conds].notna().sum(axis=1)
 
@@ -355,7 +367,7 @@ def pct(v, signed=True):
 def write_report(df: pd.DataFrame, eps: list[dict], notes: dict, pbr: pd.DataFrame | None = None) -> str:
     last = df.dropna(subset=["state"]).iloc[-1]
     d = last.name.date()
-    names = {"credit_ok": "신용 안정", "fx_ok": "외환 안정", "tightening_ok": "긴축 둔화", "ma6m_ok": "6개월선 회복", "vol_ok": "변동성 진정"}
+    names = {"credit_ok": "신용 안정", "fx_ok": "외환 안정", "tightening_ok": "긴축 둔화", "ma6m_ok": "6개월선 회복", "vol_ok": "변동성 진정", "pbr_ok": "PBR 저평가"}
     L = [f"# 코스피 바닥 신호 리포트", "",
          f"생성: {pd.Timestamp.now(tz='Asia/Seoul'):%Y-%m-%d %H:%M} KST · 데이터 마지막 날짜: **{d}** · 참고용 분석이며 투자 자문이 아닙니다.", "",
          "## 현재 상태", "",
@@ -364,23 +376,27 @@ def write_report(df: pd.DataFrame, eps: list[dict], notes: dict, pbr: pd.DataFra
     if pbr is not None and len(pbr):
         p = pbr.iloc[-1]
         when = f"{p['date']} {p['time_kst'] if isinstance(p['time_kst'], str) else ''}".strip() + (" 장중" if int(p["intraday"]) else "")
+        lc = df["pbr_cut"].dropna()
+        cut = f". 저평가 기준선(최근 5년 하위 {int(PBR_PCT * 100)}%): {lc.iloc[-1]:.2f}배" if len(lc) else ""
         if p["source"] == "KRX":
-            L.append(f"- 코스피 PBR: **{float(p['pbr']):.2f}배** ({p['date']} KRX 공식). 판정에는 쓰지 않는 참고 지표")
+            L.append(f"- 코스피 PBR: **{float(p['pbr']):.2f}배** ({p['date']} KRX 공식){cut}")
         else:
-            L.append(f"- 코스피 PBR(추정): **{float(p['pbr']):.2f}배** ({when} 기준, 네이버 종목별 PBR로 계산, 보통주 {int(p['n_stocks'])}종목·시가총액 {float(p['coverage']):.0%} 반영). 판정에는 쓰지 않는 참고 지표")
+            L.append(f"- 코스피 PBR(추정): **{float(p['pbr']):.2f}배** ({when} 기준, 네이버 종목별 PBR로 계산, 보통주 {int(p['n_stocks'])}종목·시가총액 {float(p['coverage']):.0%} 반영){cut}")
     L.append("")
     L += ["| 항목 | 상태 | 기준 |", "|---|---|---|"]
     rule = {"credit_ok": "스프레드가 20일 평균보다 낮고 60일 고점의 0.9배 이하",
             "fx_ok": "원/달러가 20일 평균보다 낮음",
             "tightening_ok": f"미국 2년물이 {TIGHT_LAG}거래일 전보다 낮음",
             "ma6m_ok": f"코스피가 {MA_DAYS}일 이동평균 위",
-            "vol_ok": f"{VOL_DAYS}일 실현변동성이 60일 고점의 {VOL_RATIO}배 이하"}
+            "vol_ok": f"{VOL_DAYS}일 실현변동성이 60일 고점의 {VOL_RATIO}배 이하",
+            "pbr_ok": f"코스피 PBR이 최근 약 5년({PBR_WINDOW}거래일) 값의 하위 {int(PBR_PCT * 100)}% 이하"}
     for c, nm in names.items():
         v = last[c]
         L.append(f"| {nm} | {'충족' if v == 1 else '미충족' if v == 0 else '자료 없음'} | {rule[c]} |")
     L += ["", f"모든 항목은 {PERSIST}거래일 연속 충족돼야 1로 봅니다.", ""]
 
     L += ["## 판정 규칙", "",
+          f"체크 항목은 {len(COND_COLS)}개입니다. 자료가 없는 항목(예: 2003년 이전 외환, 2003년 이전 PBR)은 빼고 셉니다.", "",
           "- **회복**: 4개 이상 충족 + 6개월선 위",
           "- **바닥 확인 중**: 3개 이상 충족",
           "- **단기 반등 가능**: 2개 충족",
@@ -434,7 +450,8 @@ def write_report(df: pd.DataFrame, eps: list[dict], notes: dict, pbr: pd.DataFra
           "- PBR: KRX 정보데이터시스템 공식 코스피 PBR(로그인 필요, KRX_ID/KRX_PW 설정 시). 그날 KRX 값이 아직 없으면 "
           "네이버 증권 종목별 시가총액·PBR로 계산한 추정치(시가총액 합 ÷ 순자산 합, 보통주만)를 쓰고, 다음 실행 때 공식 값으로 바뀜", "",
           "## 한계", "",
-          "- 이익(EPS) 바닥, VKOSPI, ADR, 국내 회사채 스프레드는 무료 공개 소스가 없어 빠져 있습니다. PBR은 참고용으로만 표시하고 판정에는 넣지 않았습니다.",
+          "- 이익(EPS) 바닥, VKOSPI, ADR, 국내 회사채 스프레드는 무료 공개 소스가 없어 빠져 있습니다. ",
+          "- PBR 저평가 기준(최근 5년 하위 20%)은 결과를 보기 전에 정한 값입니다. 2026-11-12에 체크 항목에 추가했고, 과거 성적표도 같은 규칙으로 다시 계산한 것입니다.",
           "- 임계값(연속 일수, 0.9배, 0.7배 등)은 검증 전 초기값입니다. 결과에 맞춰 조정하면 과적합이 됩니다.",
           "- 하락 구간은 사후에 정의한 것이라 실제 실시간 판단보다 유리하게 보일 수 있습니다.", ""]
     return "\n".join(L)
@@ -446,19 +463,18 @@ def main() -> int:
     except Exception:  # noqa: BLE001
         pass
     df, notes = load()
-    df = build(df)
+    pbr = update_pbr_history()
+    closed = pbr[pbr["intraday"].fillna(0).astype(int) == 0] if len(pbr) else pbr
+    pbr_s = closed.set_index(pd.to_datetime(closed["date"]))["pbr"].astype(float) if len(closed) else None
+    df = build(df, pbr_s)
     eps = episodes(df)
-    cols = ["kospi", "state", "conditions_met", "credit_ok", "fx_ok", "tightening_ok", "ma6m_ok", "vol_ok",
-            "drawdown_pct", "credit_spread", "usdkrw", "ust2y", "realized_vol", "ma6m"]
+    cols = ["kospi", "state", "conditions_met", *COND_COLS,
+            "drawdown_pct", "credit_spread", "usdkrw", "ust2y", "realized_vol", "ma6m", "pbr", "pbr_cut"]
     out = df[cols].copy()
     out = out[out["state"] != ""]
     out.index.name = "date"
-    for c in ["credit_ok", "fx_ok", "tightening_ok", "ma6m_ok", "vol_ok", "conditions_met"]:
+    for c in [*COND_COLS, "conditions_met"]:
         out[c] = out[c].astype("Int64")
-    pbr = update_pbr_history()
-    if len(pbr):
-        closed = pbr[pbr["intraday"].fillna(0).astype(int) == 0]
-        out["pbr"] = closed.set_index(pd.to_datetime(closed["date"]))["pbr"].reindex(out.index)
     out.round(3).to_csv(OUT / "signals_daily.csv", date_format="%Y-%m-%d")
     df[["kospi"]].rename_axis("date").round(2).to_csv(OUT / "kospi_history.csv", date_format="%Y-%m-%d")
     (OUT / "report.md").write_text(write_report(df, eps, notes, pbr), encoding="utf-8")

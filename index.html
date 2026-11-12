@@ -751,7 +751,10 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     if (prev) { const d = +last.pbr - +prev.pbr; parts.push(`전 기록(${prev.date}) 대비 ${d >= 0 ? '+' : ''}${d.toFixed(2)}`); }
     if (official) parts.push('한국거래소 정보데이터시스템');
     else if (last.n_stocks) parts.push(`네이버 종목별 PBR로 계산 · 보통주 ${(+last.n_stocks).toLocaleString('ko-KR')}종목 · 시가총액 ${(+last.coverage * 100).toFixed(1)}% 반영`);
-    parts.push('판정에는 쓰지 않는 참고 지표');
+    const cutCol = M && M.others.find((o) => o.name === 'pbr_cut');
+    let cut = null;
+    if (cutCol) for (let i = M.n - 1; i >= 0; i--) if (cutCol.vals[i] != null) { cut = cutCol.vals[i]; break; }
+    if (cut != null) parts.push(`저평가 기준선(최근 5년 하위 20%) ${cut.toFixed(2)}배 이하`);
     $('pbrNote').textContent = parts.join(' · ');
   }
 
