@@ -75,6 +75,9 @@ h1 { font-size: 1.6rem; line-height: 1.25; margin: 0; letter-spacing: -.01em; te
 .cond.on .dot { background: var(--on); color: var(--panel); }
 .cond.off .dot { background: var(--off); color: var(--muted); }
 .cond.na { opacity: .55; }
+.pbr { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.pbr .label { margin-bottom: 2px; }
+.pbr-v { font: 500 1.35rem var(--f-mono); font-variant-numeric: tabular-nums; margin-right: 6px; }
 .cond-count { font: 500 .9rem var(--f-mono); color: var(--muted); }
 
 .chart-head { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
@@ -152,6 +155,11 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       <div class="meta" id="lastDate">–</div>
       <div id="stateChip"></div>
       <div class="meta" id="stateDur" style="margin-top:6px"></div>
+      <div class="pbr" id="pbrBox" hidden>
+        <p class="label">코스피 PBR (추정)</p>
+        <div><span class="pbr-v" id="pbrVal"></span><span class="meta" id="pbrWhen"></span></div>
+        <div class="meta" id="pbrNote"></div>
+      </div>
     </div>
     <div class="panel">
       <p class="label">체크 항목 <span class="cond-count" id="condCount"></span></p>
@@ -700,7 +708,34 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     $('source').innerHTML = sourceDesc;
     if (!M) return;
     if (endIdx != null && endIdx > M.n) endIdx = null;
-    renderStatus(); renderOverlayOptions(); renderChart(); renderReport();
+    renderStatus(); renderPbr(); renderOverlayOptions(); renderChart(); renderReport();
+  }
+
+  // ---------- PBR (pbr_history.csv: date,pbr,coverage,n_stocks,time_kst,intraday) ----------
+  let pbrRows = [];
+  function setPbr(text) {
+    const rows = parseCSV(text);
+    if (rows.length < 2) return;
+    const h = rows[0].map((x) => x.trim());
+    pbrRows = rows.slice(1).map((r) => Object.fromEntries(h.map((k, i) => [k, (r[i] ?? '').trim()]))).filter((r) => r.pbr && !isNaN(+r.pbr));
+  }
+  function renderPbr() {
+    const box = $('pbrBox');
+    let last = pbrRows[pbrRows.length - 1];
+    if (!last && M) {   // fall back to a pbr column inside signals_daily.csv
+      const c = M.others.find((o) => /^pbr$/i.test(o.name));
+      if (c) for (let i = M.n - 1; i >= 0; i--) if (c.vals[i] != null) { last = { pbr: c.vals[i], date: fmtD(M.dates[i]) }; break; }
+    }
+    box.hidden = !last;
+    if (!last) return;
+    $('pbrVal').textContent = (+last.pbr).toFixed(2) + '배';
+    $('pbrWhen').textContent = ' ' + last.date + (last.time_kst ? ' ' + last.time_kst : '') + (last.intraday === '1' ? ' 장중' : '');
+    const prev = pbrRows.length > 1 ? pbrRows[pbrRows.length - 2] : null;
+    const parts = [];
+    if (prev) { const d = +last.pbr - +prev.pbr; parts.push(`전 기록(${prev.date}) 대비 ${d >= 0 ? '+' : ''}${d.toFixed(2)}`); }
+    if (last.n_stocks) parts.push(`보통주 ${(+last.n_stocks).toLocaleString('ko-KR')}종목 · 시가총액 ${(+last.coverage * 100).toFixed(1)}% 반영`);
+    parts.push('판정에는 쓰지 않는 참고 지표');
+    $('pbrNote').textContent = parts.join(' · ');
   }
 
   function showErr(msg) { const e = $('err'); e.textContent = msg; e.hidden = !msg; }
@@ -711,6 +746,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     let csvName = '', mdName = '';
     for (const f of list) {
       const t = await f.text();
+      if (/pbr.*\.csv$/i.test(f.name)) { setPbr(t); continue; }
       if (/\.csv$/i.test(f.name)) {
         try { M = buildModel(t); csvName = f.name; } catch (e) { showErr(f.name + ': ' + e.message); return; }
       } else if (/\.(md|txt)$/i.test(f.name)) { reportMd = t; mdName = f.name; }
@@ -747,6 +783,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
 
   // ---------- sample (synthetic) ----------
   function loadSample() {
+    pbrRows = [];
     let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     const gauss = () => Math.sqrt(-2 * Math.log(rnd() + 1e-9)) * Math.cos(2 * Math.PI * rnd());
     const out = ['date,kospi,hy_spread,credit_ok,fx_ok,tightening_ok,ma6m_ok,vol_ok,state'];
@@ -791,6 +828,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       if (!/^﻿?[^\n]*,/.test(t) || /<html/i.test(t.slice(0, 200))) throw 0;
       M = buildModel(t);
       try { const r2 = await fetch('report.md', { cache: 'no-store' }); if (r2.ok) { const m = await r2.text(); if (!/<html/i.test(m.slice(0, 200))) reportMd = m; } } catch (_) {}
+      try { const r3 = await fetch('pbr_history.csv', { cache: 'no-store' }); if (r3.ok) { const p = await r3.text(); if (!/<html/i.test(p.slice(0, 200))) setPbr(p); } } catch (_) {}
       sourceDesc = '같은 폴더에서 자동으로 불러옴: <b>signals_daily.csv' + (reportMd ? ', report.md' : '') + '</b>' + ` · ${M.n.toLocaleString('ko-KR')}거래일 · ${fmtD(M.dates[0])} ~ ${fmtD(M.dates[M.n - 1])}`;
       renderAll();
     } catch (_) { loadSample(); }

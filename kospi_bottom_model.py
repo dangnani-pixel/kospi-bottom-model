@@ -105,6 +105,66 @@ def fred(series_id: str) -> pd.Series:
     return df.dropna().set_index("date")["v"]
 
 
+PBR_FILE = OUT / "pbr_history.csv"
+
+
+def kospi_pbr() -> dict:
+    """코스피 PBR 추정치: 네이버 종목별 시가총액·PBR로 '시가총액 합 ÷ 순자산 합'을 계산.
+
+    KRX 공식 지수 PBR은 정보데이터시스템 로그인이 필요해 직접 받을 수 없다.
+    보통주만 쓰고(우선주·ETF·ETN 제외), PBR이 없거나 0 이하(자본잠식)인 종목은 뺀다.
+    """
+    import concurrent.futures as cf
+    import re
+
+    def num(s):
+        return float(re.sub(r"[^0-9.\-]", "", s)) if s and re.search(r"\d", s) else None
+
+    stocks, page = [], 1
+    while page <= 40:
+        j = json.loads(http_get(f"https://m.stock.naver.com/api/stocks/marketValue/KOSPI?page={page}&pageSize=100"))
+        if not j.get("stocks"):
+            break
+        stocks += j["stocks"]
+        page += 1
+    common = [s for s in stocks if s.get("stockEndType") == "stock" and not re.search(r"우[A-C]?$|우\(전환\)$", s["stockName"])]
+    total_mc = sum(num(s["marketValue"]) or 0 for s in common)
+
+    def one(s):
+        try:
+            j = json.loads(http_get(f"https://m.stock.naver.com/api/stock/{s['itemCode']}/integration"))
+            d = {x["code"]: x["value"] for x in j.get("totalInfos", [])}
+            return num(s["marketValue"]), num(d.get("pbr"))
+        except Exception:  # noqa: BLE001
+            return num(s["marketValue"]), None
+
+    with cf.ThreadPoolExecutor(8) as ex:
+        res = list(ex.map(one, common))
+    used = [(mc, p) for mc, p in res if mc and p and p > 0]
+    mc = sum(m for m, _ in used)
+    book = sum(m / p for m, p in used)
+    now = pd.Timestamp.now(tz="Asia/Seoul")
+    return {"date": now.strftime("%Y-%m-%d"), "pbr": round(mc / book, 3), "coverage": round(mc / total_mc, 3),
+            "n_stocks": len(used), "time_kst": now.strftime("%H:%M"),
+            "intraday": int((now.hour, now.minute) < (15, 40) and now.weekday() < 5)}
+
+
+def update_pbr_history() -> pd.DataFrame:
+    hist = pd.read_csv(PBR_FILE) if PBR_FILE.exists() else pd.DataFrame(columns=["date", "pbr", "coverage", "n_stocks", "time_kst", "intraday"])
+    print("코스피 PBR 추정 (네이버 종목별 PBR)")
+    try:
+        row = kospi_pbr()
+        if row["coverage"] < 0.8:
+            raise RuntimeError(f"시가총액 커버리지가 {row['coverage']:.0%}로 낮아 저장하지 않음")
+        hist = pd.concat([hist[hist["date"] != row["date"]], pd.DataFrame([row])], ignore_index=True)
+        hist = hist.sort_values("date")
+        hist.to_csv(PBR_FILE, index=False)
+        print(f"  PBR {row['pbr']} (보통주 {row['n_stocks']}종목, 시총 {row['coverage']:.1%})")
+    except Exception as e:  # noqa: BLE001
+        print("  PBR 계산 실패, 이전 기록 유지:", e)
+    return hist
+
+
 def persist(cond: pd.Series, n: int = PERSIST) -> pd.Series:
     """n거래일 연속 True일 때만 1."""
     c = cond.fillna(False).astype(int)
@@ -241,7 +301,7 @@ def pct(v, signed=True):
     return "–" if v is None or pd.isna(v) else (f"{v * 100:+.1f}%" if signed else f"{v * 100:.1f}%")
 
 
-def write_report(df: pd.DataFrame, eps: list[dict], notes: dict) -> str:
+def write_report(df: pd.DataFrame, eps: list[dict], notes: dict, pbr: pd.DataFrame | None = None) -> str:
     last = df.dropna(subset=["state"]).iloc[-1]
     d = last.name.date()
     names = {"credit_ok": "신용 안정", "fx_ok": "외환 안정", "tightening_ok": "긴축 둔화", "ma6m_ok": "6개월선 회복", "vol_ok": "변동성 진정"}
@@ -249,7 +309,12 @@ def write_report(df: pd.DataFrame, eps: list[dict], notes: dict) -> str:
          f"생성: {pd.Timestamp.now(tz='Asia/Seoul'):%Y-%m-%d %H:%M} KST · 데이터 마지막 날짜: **{d}** · 참고용 분석이며 투자 자문이 아닙니다.", "",
          "## 현재 상태", "",
          f"- 코스피: **{last['kospi']:,.2f}** (252일 고점 대비 {last['drawdown_pct']:+.1f}%)",
-         f"- 판정: **{last['state']}** (체크 항목 {int(last['conditions_met'])} / {int(last['conditions_known'])} 충족)", ""]
+         f"- 판정: **{last['state']}** (체크 항목 {int(last['conditions_met'])} / {int(last['conditions_known'])} 충족)"]
+    if pbr is not None and len(pbr):
+        p = pbr.iloc[-1]
+        when = f"{p['date']} {p['time_kst']}" + (" 장중" if int(p["intraday"]) else "")
+        L.append(f"- 코스피 PBR(추정): **{float(p['pbr']):.2f}배** ({when} 기준, 보통주 {int(p['n_stocks'])}종목·시가총액 {float(p['coverage']):.0%} 반영). 판정에는 쓰지 않는 참고 지표")
+    L.append("")
     L += ["| 항목 | 상태 | 기준 |", "|---|---|---|"]
     rule = {"credit_ok": "스프레드가 20일 평균보다 낮고 60일 고점의 0.9배 이하",
             "fx_ok": "원/달러가 20일 평균보다 낮음",
@@ -311,9 +376,11 @@ def write_report(df: pd.DataFrame, eps: list[dict], notes: dict) -> str:
           f"- 외환: {notes['fx']}. 자료가 없는 초기 기간은 외환 항목을 빼고 계산",
           "- 긴축: 미국 2년물 국채금리(FRED DGS2)",
           "- 변동성: VKOSPI 대신 코스피 20일 실현변동성(연율화)",
-          "- 미국 지표는 한국 장 마감 후 발표되므로 하루 늦춰 반영", "",
+          "- 미국 지표는 한국 장 마감 후 발표되므로 하루 늦춰 반영",
+          "- PBR: 네이버 증권 종목별 시가총액·PBR로 계산한 추정치(시가총액 합 ÷ 순자산 합, 보통주만, 자본잠식 종목 제외). "
+          "KRX 공식 지수 PBR과 기준 시점·산식이 달라 차이가 날 수 있고, 매일 실행될 때부터 기록이 쌓임", "",
           "## 한계", "",
-          "- 이익(EPS) 바닥, VKOSPI, ADR, PBR, 국내 회사채 스프레드는 무료 공개 소스가 없어 빠져 있습니다.",
+          "- 이익(EPS) 바닥, VKOSPI, ADR, 국내 회사채 스프레드는 무료 공개 소스가 없어 빠져 있습니다. PBR은 참고용으로만 표시하고 판정에는 넣지 않았습니다.",
           "- 임계값(연속 일수, 0.9배, 0.7배 등)은 검증 전 초기값입니다. 결과에 맞춰 조정하면 과적합이 됩니다.",
           "- 하락 구간은 사후에 정의한 것이라 실제 실시간 판단보다 유리하게 보일 수 있습니다.", ""]
     return "\n".join(L)
@@ -334,9 +401,13 @@ def main() -> int:
     out.index.name = "date"
     for c in ["credit_ok", "fx_ok", "tightening_ok", "ma6m_ok", "vol_ok", "conditions_met"]:
         out[c] = out[c].astype("Int64")
+    pbr = update_pbr_history()
+    if len(pbr):
+        closed = pbr[pbr["intraday"].astype(int) == 0]
+        out["pbr"] = closed.set_index(pd.to_datetime(closed["date"]))["pbr"].reindex(out.index)
     out.round(3).to_csv(OUT / "signals_daily.csv", date_format="%Y-%m-%d")
     df[["kospi"]].rename_axis("date").round(2).to_csv(OUT / "kospi_history.csv", date_format="%Y-%m-%d")
-    (OUT / "report.md").write_text(write_report(df, eps, notes), encoding="utf-8")
+    (OUT / "report.md").write_text(write_report(df, eps, notes, pbr), encoding="utf-8")
     last = out.iloc[-1]
     print(f"\n완료: {len(out)}행, 마지막 {out.index[-1].date()} · 판정 {last['state']} · 하락 구간 {len(eps)}개")
     print(f"→ {OUT / 'signals_daily.csv'}\n→ {OUT / 'report.md'}")

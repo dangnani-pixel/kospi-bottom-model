@@ -32,5 +32,6 @@ python kospi_bottom_model.py
 - 외환: Yahoo Finance KRW=X (2003-12부터). 접속이 안 되면 FRED DEXKOUS로 대체
 - 긴축: FRED DGS2 (미국 2년물)
 - 변동성: 코스피 20일 실현변동성 (VKOSPI 대체)
+- PBR(참고용, 판정 미반영): 네이버 증권 종목별 시가총액·PBR로 계산한 추정치. KRX 공식 지수 PBR은 로그인이 필요해 직접 받지 못함. `pbr_history.csv`에 매일 한 줄씩 쌓임
 
 참고용 분석이며 매수·매도 판단이나 투자 자문이 아닙니다.

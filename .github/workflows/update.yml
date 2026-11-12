@@ -42,12 +42,12 @@ jobs:
       - name: Commit new data
         if: steps.model.outcome == 'success'
         run: |
-          if git diff --quiet -- signals_daily.csv; then
+          if git diff --quiet -- signals_daily.csv pbr_history.csv; then
             echo "No new trading day; nothing to commit."
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add signals_daily.csv report.md kospi_history.csv
+            git add signals_daily.csv report.md kospi_history.csv pbr_history.csv
             git commit -m "Update signals $(date -u +%Y-%m-%d)"
             git push
           fi
@@ -55,7 +55,7 @@ jobs:
       - name: Collect site files
         run: |
           mkdir -p _site
-          cp index.html signals_daily.csv report.md _site/
+          cp index.html signals_daily.csv report.md pbr_history.csv _site/
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
