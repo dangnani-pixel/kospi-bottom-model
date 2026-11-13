@@ -65,6 +65,7 @@ a.btn { text-decoration: none; display: inline-block; }
 .label { font-size: .74rem; font-weight: 600; letter-spacing: .06em; color: var(--muted); text-transform: uppercase; margin: 0 0 6px; }
 .big { font: 500 1.9rem/1.1 var(--f-mono); font-variant-numeric: tabular-nums; }
 .up { color: var(--st-fall); } .down { color: var(--accent); }
+.basis { margin: 2px 0 8px; font-size: .85rem; }
 .live-tag { font-size: .72rem; font-weight: 700; letter-spacing: .04em; color: var(--st-bounce); border: 1px solid var(--st-bounce); border-radius: 4px; padding: 0 6px; margin-left: 6px; vertical-align: middle; }
 .meta { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; }
 .state-chip { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1.05rem; padding: 4px 12px 4px 10px;
@@ -149,6 +150,8 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
   <section class="status">
     <div class="panel">
       <p class="label">최근 판정 <span class="live-tag" id="liveTag" hidden>장중 잠정</span></p>
+      <div class="ctl basis" id="basisBox" hidden><label for="basis">판정 기준</label>
+        <select id="basis"><option value="v1">기존</option><option value="v2">개선안(v2, 비교 중)</option></select></div>
       <div class="big" id="lastPrice">–</div>
       <div class="meta" id="lastDate">–</div>
       <div class="meta" id="liveSig" hidden></div>
@@ -221,13 +224,16 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     [/adr|breadth|등락/i, 'ADR 반등'],
     [/aa|corp|회사채/i, '국내 신용 안정'],
   ];
+  const V2_LABELS = { v2_capitulation_ok: '급락 진정', v2_price_ok: '저점 상승', v2_breadth_ok: '시장 폭 개선',
+    v2_foreign_ok: '외국인 순매수', v2_risk_ok: '글로벌 위험 완화', v2_value_ok: '밸류에이션', v2_rates_ok: '금리 부담 완화' };
   function condLabel(c) {
+    if (V2_LABELS[c]) return V2_LABELS[c];
     for (const [re, l] of COND_LABELS) if (re.test(c)) return l;
     return c;
   }
   const STATES = [
     { key: 'fall', re: /하락|fall|declin|down|bear/i, label: '하락 진행', v: '--st-fall' },
-    { key: 'bounce', re: /반등|bounce|rebound|relief/i, label: '단기 반등 가능', v: '--st-bounce' },
+    { key: 'bounce', re: /반등|탐색|bounce|rebound|relief/i, label: '단기 반등 가능', v: '--st-bounce' },
     { key: 'check', re: /바닥|bottom|confirm|check/i, label: '바닥 확인 중', v: '--st-check' },
     { key: 'recover', re: /회복|recover|bull|up/i, label: '회복', v: '--st-recover' },
   ];
@@ -296,11 +302,15 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     const price = nums.find((c) => /kospi|close|종가|지수|price/i.test(c.name)) || nums[0];
     if (!price) throw new Error('지수(종가) 숫자 열을 찾지 못했습니다.');
     const texts = cols.filter((c) => c.kind === 'text');
-    const state = texts.find((c) => /state|phase|regime|판정|단계|signal/i.test(c.name)) ||
+    const state = texts.find((c) => c.name === 'state') || texts.find((c) => !/^v2_/.test(c.name) && /state|phase|regime|판정|단계|signal/i.test(c.name)) ||
       texts.find((c) => new Set(c.vals).size <= 8);
-    const conds = cols.filter((c) => c.kind === 'bool' && !/state|판정/i.test(c.name));
-    const others = nums.filter((c) => c !== price);
-    return { dates: pick(dates), price, state, conds, others, n: keep.length };
+    const conds = cols.filter((c) => c.kind === 'bool' && !/state|판정/i.test(c.name) && !/^v2_/.test(c.name));
+    const v2state = texts.find((c) => c.name === 'v2_state');
+    const v2conds = cols.filter((c) => c.kind === 'bool' && /^v2_.*_ok$/.test(c.name));
+    const others = nums.filter((c) => c !== price && !/^v2_score$/.test(c.name));
+    const sets = { v1: { state, conds } };
+    if (v2state && v2conds.length) sets.v2 = { state: { ...v2state, vals: v2state.vals.map((v) => v || null) }, conds: v2conds };
+    return { dates: pick(dates), price, state, conds, others, n: keep.length, sets };
   }
 
   // ---------- state ----------
@@ -789,6 +799,21 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
 
   // ---------- live (intraday, provisional): append today's value as the latest point ----------
   let M0 = null;
+  let basis = 'v1';
+  try { basis = localStorage.getItem('kospi-basis') || 'v1'; } catch (_) {}
+  function applyBasis() {
+    if (!M0 || !M0.sets) return;
+    const b = M0.sets[basis] ? basis : 'v1';
+    M0.state = M0.sets[b].state; M0.conds = M0.sets[b].conds; M0.cache = null;
+    $('basisBox').hidden = !M0.sets.v2;
+    $('basis').value = b;
+    M = M && M.live ? withLive(M0, M.live) : M0;
+  }
+  $('basis').addEventListener('change', (e) => {
+    basis = e.target.value;
+    try { localStorage.setItem('kospi-basis', basis); } catch (_) {}
+    applyBasis(); renderAll();
+  });
   const LIVE_URL = 'https://raw.githubusercontent.com/dangnani-pixel/kospi-bottom-model/live-data/live.json';
   function withLive(B, L) {
     const d = parseDate(L.time_kst);
@@ -827,6 +852,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       const t = await r.text();
       if (!/^﻿?[^\n]*,/.test(t) || /<html/i.test(t.slice(0, 200))) throw 0;
       M = M0 = buildModel(t);
+      applyBasis();
       try { const r2 = await fetch('report.md', { cache: 'no-store' }); if (r2.ok) { const m = await r2.text(); if (!/<html/i.test(m.slice(0, 200))) reportMd = m; } } catch (_) {}
       try { const r3 = await fetch('pbr_history.csv', { cache: 'no-store' }); if (r3.ok) { const p = await r3.text(); if (!/<html/i.test(p.slice(0, 200))) setPbr(p); } } catch (_) {}
       sourceDesc = '종가 데이터 · ' + `${M.n.toLocaleString('ko-KR')}거래일 · ${fmtD(M.dates[0])} ~ ${fmtD(M.dates[M.n - 1])}`;

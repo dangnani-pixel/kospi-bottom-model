@@ -364,7 +364,8 @@ def pct(v, signed=True):
     return "–" if v is None or pd.isna(v) else (f"{v * 100:+.1f}%" if signed else f"{v * 100:.1f}%")
 
 
-def write_report(df: pd.DataFrame, eps: list[dict], notes: dict, pbr: pd.DataFrame | None = None) -> str:
+def write_report(df: pd.DataFrame, eps: list[dict], notes: dict, pbr: pd.DataFrame | None = None,
+                 extra: list[str] | None = None) -> str:
     last = df.dropna(subset=["state"]).iloc[-1]
     d = last.name.date()
     names = {"credit_ok": "신용 안정", "fx_ok": "외환 안정", "tightening_ok": "긴축 둔화", "ma6m_ok": "6개월선 회복", "vol_ok": "변동성 진정", "pbr_ok": "PBR 저평가"}
@@ -440,6 +441,7 @@ def write_report(df: pd.DataFrame, eps: list[dict], notes: dict, pbr: pd.DataFra
           f"| 헛신호 후 추가 하락 (평균) | {pct(mw)} | {pct(aw)} |",
           f"| 저점 후 지연 (중앙값) | {'–' if ml is None else f'{ml:.0f}일'} | {'–' if al is None else f'{al:.0f}일'} |", ""]
 
+    L += extra or []
     L += ["## 데이터", "",
           f"- 코스피 지수: {notes['kospi']}. 장중(15:40 전)에 실행하면 오늘 값은 제외",
           f"- 신용: {notes['credit']}",
@@ -450,7 +452,8 @@ def write_report(df: pd.DataFrame, eps: list[dict], notes: dict, pbr: pd.DataFra
           "- PBR: KRX 정보데이터시스템 공식 코스피 PBR(로그인 필요, KRX_ID/KRX_PW 설정 시). 그날 KRX 값이 아직 없으면 "
           "네이버 증권 종목별 시가총액·PBR로 계산한 추정치(시가총액 합 ÷ 순자산 합, 보통주만)를 쓰고, 다음 실행 때 공식 값으로 바뀜", "",
           "## 한계", "",
-          "- 이익(EPS) 바닥, VKOSPI, ADR, 국내 회사채 스프레드는 무료 공개 소스가 없어 빠져 있습니다. ",
+          "- 개선안(v2) 추가 자료: 시장 폭(날짜별 상승·하락 종목 수), 외국인 순매수, 코스피 PER은 KRX 정보데이터시스템(pykrx, 로그인 필요)에서 받아 data/에 저장, VIX는 FRED VIXCLS(하루 늦춰 반영)",
+          "- 이익 전망(EPS 조정·선행 PER), VKOSPI, 신용융자 잔고, 국내 회사채 스프레드는 무료 자동 수집 소스가 없어 빠져 있습니다. ",
           "- PBR 저평가 기준(최근 5년 하위 20%)은 결과를 보기 전에 정한 값입니다. 2026-11-12에 체크 항목에 추가했고, 과거 성적표도 같은 규칙으로 다시 계산한 것입니다.",
           "- 임계값(연속 일수, 0.9배, 0.7배 등)은 검증 전 초기값입니다. 결과에 맞춰 조정하면 과적합이 됩니다.",
           "- 하락 구간은 사후에 정의한 것이라 실제 실시간 판단보다 유리하게 보일 수 있습니다.", ""]
@@ -467,17 +470,28 @@ def main() -> int:
     closed = pbr[pbr["intraday"].fillna(0).astype(int) == 0] if len(pbr) else pbr
     pbr_s = closed.set_index(pd.to_datetime(closed["date"]))["pbr"].astype(float) if len(closed) else None
     df = build(df, pbr_s)
+    import bottom_v2 as v2
+    print("개선안(v2) 추가 자료 (KRX 시장 폭·외국인·PER, FRED VIX)")
+    v2.update_krx_histories()
+    try:
+        vix = fred("VIXCLS")
+    except Exception as e:  # noqa: BLE001
+        print("  VIX 실패:", e)
+        vix = None
+    df = v2.build_v2(df, vix)
     eps = episodes(df)
+    extra = v2.report_v2(df, eps, score, pct, v2.macro_snapshot(fred), v2.trade_backtest(df))
     cols = ["kospi", "state", "conditions_met", *COND_COLS,
-            "drawdown_pct", "credit_spread", "usdkrw", "ust2y", "realized_vol", "ma6m", "pbr", "pbr_cut"]
+            "drawdown_pct", "credit_spread", "usdkrw", "ust2y", "realized_vol", "ma6m", "pbr", "pbr_cut",
+            "v2_state", "v2_score", *v2.V2_GROUPS, "v2_adv_ratio10", "v2_foreign20_bn", "vix", "v2_per"]
     out = df[cols].copy()
     out = out[out["state"] != ""]
     out.index.name = "date"
-    for c in [*COND_COLS, "conditions_met"]:
+    for c in [*COND_COLS, "conditions_met", *v2.V2_GROUPS, "v2_score"]:
         out[c] = out[c].astype("Int64")
     out.round(3).to_csv(OUT / "signals_daily.csv", date_format="%Y-%m-%d")
     df[["kospi"]].rename_axis("date").round(2).to_csv(OUT / "kospi_history.csv", date_format="%Y-%m-%d")
-    (OUT / "report.md").write_text(write_report(df, eps, notes, pbr), encoding="utf-8")
+    (OUT / "report.md").write_text(write_report(df, eps, notes, pbr, extra), encoding="utf-8")
     last = out.iloc[-1]
     print(f"\n완료: {len(out)}행, 마지막 {out.index[-1].date()} · 판정 {last['state']} · 하락 구간 {len(eps)}개")
     print(f"→ {OUT / 'signals_daily.csv'}\n→ {OUT / 'report.md'}")
