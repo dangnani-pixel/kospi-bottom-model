@@ -1,0 +1,13 @@
+{
+ "time_kst": "2026-11-13 15:38",
+ "kospi": 5290.53,
+ "prev_close": 5342.73,
+ "prev_date": "2026-11-12",
+ "change_pct": -0.98,
+ "ema_days": 60,
+ "ema": 6144.8,
+ "state": "하락 진행",
+ "state_date": "2026-11-12",
+ "signal": "현금",
+ "provisional": true
+}
