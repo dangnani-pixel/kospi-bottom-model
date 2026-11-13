@@ -234,7 +234,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
   const STATES = [
     { key: 'fall', re: /하락|fall|declin|down|bear/i, label: '하락 진행', v: '--st-fall' },
     { key: 'bounce', re: /반등|탐색|bounce|rebound|relief/i, label: '단기 반등 가능', v: '--st-bounce' },
-    { key: 'check', re: /바닥|bottom|confirm|check/i, label: '바닥 확인 중', v: '--st-check' },
+    { key: 'check', re: /바닥 확인|바닥 형성|bottom|confirm|check/i, label: '바닥 확인 중', v: '--st-check' },
     { key: 'recover', re: /회복|recover|bull|up/i, label: '회복', v: '--st-recover' },
   ];
   function stateOf(s) {
