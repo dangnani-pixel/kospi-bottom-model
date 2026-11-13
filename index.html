@@ -621,7 +621,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     };
     STATES.forEach((st) => {
       if (st.key !== 'fall' && !$('allStates').checked) return;
-      const hit = [...seen].find((v) => st.re.test(v)); if (hit) add(css(st.v), hit + ' 구간', st.key === 'fall' ? .8 : .55);
+      const hit = [...seen].filter((v) => stateOf(v) === st).join('·'); if (hit) add(css(st.v), hit + ' 구간', st.key === 'fall' ? .8 : .55);
     });
     if (nC) add(css('--on'), '조건 충족', 1);
     mas.forEach((d, k) => add(css('--ma' + (k + 1)), d + '일 EMA', 1, true));
