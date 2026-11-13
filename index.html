@@ -50,6 +50,7 @@ header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; justi
 h1 { font-size: 1.6rem; line-height: 1.25; margin: 0; letter-spacing: -.01em; text-wrap: balance; }
 .sub { margin: 4px 0 0; color: var(--muted); font-size: .9rem; }
 .loader { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+a.btn { text-decoration: none; display: inline-block; }
 .btn { font: 500 .88rem var(--f-body); border: 1px solid var(--line); background: var(--panel); color: var(--ink);
   padding: 7px 14px; border-radius: 6px; cursor: pointer; }
 .btn:hover { border-color: var(--accent); }
@@ -57,8 +58,6 @@ h1 { font-size: 1.6rem; line-height: 1.25; margin: 0; letter-spacing: -.01em; te
 .btn:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .source { font-size: .82rem; color: var(--muted); }
 .source b { color: var(--ink); font-weight: 600; }
-.sample-flag { display: inline-block; font-size: .75rem; font-weight: 600; letter-spacing: .03em; color: var(--st-bounce);
-  border: 1px solid var(--st-bounce); border-radius: 4px; padding: 0 6px; margin-left: 6px; }
 
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; min-width: 0; }
 .status { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 2fr); gap: 20px; }
@@ -130,8 +129,6 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
 .report th, .report td { border-bottom: 1px solid var(--line); padding: 6px 10px; text-align: left; white-space: nowrap; }
 .report th { color: var(--muted); font-weight: 600; font-size: .78rem; letter-spacing: .02em; border-bottom: 2px solid var(--ink); }
 .empty { color: var(--muted); font-size: .9rem; }
-.drop { position: fixed; inset: 0; background: color-mix(in srgb, var(--accent) 14%, transparent); border: 3px dashed var(--accent);
-  display: grid; place-items: center; font-weight: 700; font-size: 1.2rem; color: var(--accent); z-index: 20; }
 .foot { color: var(--muted); font-size: .8rem; max-width: 80ch; }
 .err { color: var(--st-fall); font-size: .85rem; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
@@ -143,12 +140,10 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
   <header>
     <div>
       <h1>코스피 바닥 신호판</h1>
-      <p class="sub">kospi_bottom_model.py 결과(signals_daily.csv, report.md)를 그래프와 표로 봅니다. 파일은 브라우저 안에서만 읽고 어디에도 올라가지 않습니다.</p>
+      <p class="sub">공개 시장 데이터로 코스피 바닥 조건과 판정을 매일 계산해 보여 줍니다. 장중에는 약 10분 간격으로 잠정 값이 갱신됩니다.</p>
     </div>
     <div class="loader">
-      <input type="file" id="files" accept=".csv,.md,.txt" multiple hidden>
-      <button class="btn primary" id="pick" type="button">결과 파일 열기</button>
-      <button class="btn" id="sampleBtn" type="button">예시 데이터</button>
+      <a class="btn primary" href="backtest/kospi-ema-backtest.pdf" target="_blank" rel="noopener">EMA 매매 백테스트 (PDF)</a>
     </div>
   </header>
   <div class="source" id="source"></div>
@@ -222,9 +217,8 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
 
   <section class="panel report" id="report"><p class="empty">report.md를 열면 여기에 표시됩니다.</p></section>
 
-  <p class="foot">참고용 시각화입니다. 매수·매도 판단이나 투자 자문이 아니며, 표시되는 판정은 모델 스크립트가 계산한 값을 그대로 옮긴 것입니다. 로컬에서 쓸 때는 이 파일을 스크립트 폴더에 두고 <code>python -m http.server</code>로 열면 두 결과 파일을 자동으로 불러옵니다.</p>
+  <p class="foot">참고용 시각화입니다. 매수·매도 판단이나 투자 자문이 아니며, 표시되는 판정은 모델 스크립트가 계산한 값을 그대로 옮긴 것입니다.</p>
 </div>
-<div class="drop" id="drop" hidden>여기에 놓으면 불러옵니다</div>
 
 <script>
 (function () {
@@ -779,32 +773,6 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
 
   function showErr(msg) { const e = $('err'); e.textContent = msg; e.hidden = !msg; }
 
-  // ---------- loading ----------
-  async function loadFiles(list) {
-    showErr('');
-    let csvName = '', mdName = '';
-    for (const f of list) {
-      const t = await f.text();
-      if (/pbr.*\.csv$/i.test(f.name)) { setPbr(t); continue; }
-      if (/\.csv$/i.test(f.name)) {
-        try { M = buildModel(t); csvName = f.name; } catch (e) { showErr(f.name + ': ' + e.message); return; }
-      } else if (/\.(md|txt)$/i.test(f.name)) { reportMd = t; mdName = f.name; }
-    }
-    if (csvName && !mdName) reportMd = reportMd && sourceDesc.includes('예시') ? '' : reportMd;
-    if (!csvName && !M) { showErr('signals_daily.csv도 함께 열어 주세요.'); renderReport(); return; }
-    sourceDesc = '불러온 파일: <b>' + esc([csvName, mdName].filter(Boolean).join(', ')) + '</b>' + (M ? ` · ${M.n.toLocaleString('ko-KR')}거래일 · ${fmtD(M.dates[0])} ~ ${fmtD(M.dates[M.n - 1])}` : '');
-    renderAll();
-  }
-
-  $('pick').addEventListener('click', () => $('files').click());
-  $('files').addEventListener('change', (e) => { if (e.target.files.length) loadFiles([...e.target.files]); e.target.value = ''; });
-  $('sampleBtn').addEventListener('click', loadSample);
-  let dragDepth = 0;
-  addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth++; $('drop').hidden = false; });
-  addEventListener('dragover', (e) => e.preventDefault());
-  addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('drop').hidden = true; } });
-  addEventListener('drop', (e) => { e.preventDefault(); dragDepth = 0; $('drop').hidden = true; if (e.dataTransfer.files.length) loadFiles([...e.dataTransfer.files]); });
-
   $('ranges').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     rangeDays = +b.dataset.d; endIdx = null;
@@ -819,44 +787,6 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
   let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => M && renderChart(), 120); });
   try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => M && renderAll()); } catch (_) {}
   new MutationObserver(() => M && renderAll()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-
-  // ---------- sample (synthetic) ----------
-  function loadSample() {
-    pbrRows = [];
-    let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    const gauss = () => Math.sqrt(-2 * Math.log(rnd() + 1e-9)) * Math.cos(2 * Math.PI * rnd());
-    const out = ['date,kospi,hy_spread,credit_ok,fx_ok,tightening_ok,ma6m_ok,vol_ok,state'];
-    let p = 2000, hy = 4, d = new Date(Date.UTC(2017, 0, 2));
-    const closes = [];
-    const shocks = [[2018.8, 2019.0, -.0016], [2020.1, 2020.25, -.009], [2021.5, 2022.75, -.0012], [2024.6, 2024.95, -.0011], [2026.55, 2026.75, -.0022]];
-    while (d < new Date(Date.UTC(2026, 10, 11))) {
-      if (d.getUTCDay() % 6 !== 0) {
-        const yf = d.getUTCFullYear() + d.getUTCMonth() / 12 + d.getUTCDate() / 365;
-        const sh = shocks.find(([a, b]) => yf >= a && yf < b);
-        const drift = sh ? sh[2] : .00045;
-        const vol = sh ? .019 : .009;
-        const r = drift + vol * gauss();
-        p *= Math.exp(r); closes.push(p);
-        hy += (sh ? .03 : -.012) + .05 * gauss(); hy = Math.min(11, Math.max(2.8, hy));
-        const n = closes.length;
-        const ma = closes.slice(Math.max(0, n - 126)).reduce((a, b) => a + b, 0) / Math.min(n, 126);
-        const rv = n > 21 ? Math.sqrt(closes.slice(n - 21).reduce((a, c, i, arr) => i ? a + Math.log(c / arr[i - 1]) ** 2 : a, 0) / 20) : .01;
-        const credit = hy < 5 ? 1 : 0, fx = sh ? (rnd() < .15 ? 1 : 0) : (rnd() < .85 ? 1 : 0);
-        const tight = (yf > 2019.4 && yf < 2021.8) || yf > 2023.9 ? 1 : 0;
-        const maok = p > ma ? 1 : 0, volok = rv < .013 ? 1 : 0;
-        const sc = credit + fx + tight + maok + volok;
-        const peak = Math.max(...closes.slice(Math.max(0, n - 252)));
-        const dd = p / peak - 1;
-        let st = sc >= 4 && dd > -.1 ? '회복' : dd < -.12 && sc <= 1 ? '하락 진행' : dd < -.12 && sc <= 3 ? (maok ? '바닥 확인 중' : '단기 반등 가능') : sc >= 3 ? '회복' : '단기 반등 가능';
-        out.push([fmtD(d), p.toFixed(2), hy.toFixed(2), credit, fx, tight, maok, volok, st].join(','));
-      }
-      d = new Date(d.getTime() + 864e5);
-    }
-    M = buildModel(out.join('\n'));
-    reportMd = '# 예시 리포트 (가상 데이터)\n\n이 내용은 화면 구성을 보여 주기 위한 **가상 데이터**입니다. 실제 결과가 아닙니다. `결과 파일 열기`로 스크립트가 만든 `report.md`와 `signals_daily.csv`를 함께 열어 주세요.\n\n## 하락 구간별 신호 성적 (예시)\n\n| 구간 | 고점 대비 최대 하락 | 저점 | 헛신호 수 | 헛신호 후 추가 하락 | 저점 후 신호 지연 |\n|---|---:|---|---:|---:|---:|\n| 2020 코로나 | -35.7% | 2020-03-19 | 1 | -9.8% | 23일 |\n| 2022 긴축 | -31.2% | 2022-09-30 | 3 | -12.4% | 41일 |\n\n## 6개월 이동평균 단독 신호와 비교 (예시)\n\n- 헛신호: 모델 4회 / 이동평균 단독 9회\n- 평균 지연: 모델 32일 / 이동평균 단독 27일\n';
-    sourceDesc = '<b>예시 데이터</b><span class="sample-flag">가상</span> · 실제 시장 데이터가 아닙니다. 결과 파일을 열면 바뀝니다.';
-    renderAll();
-  }
 
   // ---------- live (intraday, provisional) ----------
   async function loadLive() {
@@ -892,10 +822,10 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       M = buildModel(t);
       try { const r2 = await fetch('report.md', { cache: 'no-store' }); if (r2.ok) { const m = await r2.text(); if (!/<html/i.test(m.slice(0, 200))) reportMd = m; } } catch (_) {}
       try { const r3 = await fetch('pbr_history.csv', { cache: 'no-store' }); if (r3.ok) { const p = await r3.text(); if (!/<html/i.test(p.slice(0, 200))) setPbr(p); } } catch (_) {}
-      sourceDesc = '같은 폴더에서 자동으로 불러옴: <b>signals_daily.csv' + (reportMd ? ', report.md' : '') + '</b>' + ` · ${M.n.toLocaleString('ko-KR')}거래일 · ${fmtD(M.dates[0])} ~ ${fmtD(M.dates[M.n - 1])}`;
+      sourceDesc = '종가 데이터 · ' + `${M.n.toLocaleString('ko-KR')}거래일 · ${fmtD(M.dates[0])} ~ ${fmtD(M.dates[M.n - 1])}`;
       renderAll();
       loadLive(); setInterval(loadLive, 5 * 60 * 1000);
-    } catch (_) { loadSample(); }
+    } catch (_) { showErr('데이터를 불러오지 못했습니다. 잠시 뒤 새로고침해 주세요.'); }
   })();
 })();
 </script>

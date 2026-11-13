@@ -44,8 +44,9 @@ jobs:
       - name: Collect site files
         if: steps.live.outputs.ok == '1'
         run: |
-          mkdir -p _site
+          mkdir -p _site/backtest
           cp index.html signals_daily.csv report.md pbr_history.csv live.json _site/
+          cp backtest/*.pdf _site/backtest/
 
       - uses: actions/configure-pages@v5
         if: steps.live.outputs.ok == '1'

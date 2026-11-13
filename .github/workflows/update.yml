@@ -7,7 +7,7 @@ on:
   workflow_dispatch:          # Actions 탭에서 수동 실행
   push:
     branches: [main]
-    paths: ["index.html", "kospi_bottom_model.py", ".github/workflows/update.yml"]
+    paths: ["index.html", "kospi_bottom_model.py", "intraday.py", "backtest/**", ".github/workflows/update.yml"]
 
 permissions:
   contents: write
@@ -58,8 +58,11 @@ jobs:
 
       - name: Collect site files
         run: |
-          mkdir -p _site
+          mkdir -p _site/backtest
           cp index.html signals_daily.csv report.md pbr_history.csv _site/
+          cp backtest/*.pdf _site/backtest/
+          # 장중에 이 워크플로가 돌면(코드 수정 push 등) 장중 잠정 값도 함께 배포해 실시간 패널이 사라지지 않게 한다
+          python intraday.py && cp live.json _site/ || true
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
