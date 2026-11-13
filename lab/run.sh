@@ -1,2 +1,2 @@
 set -e
-python lab/probe.py
+python lab/fetch_history.py 260
