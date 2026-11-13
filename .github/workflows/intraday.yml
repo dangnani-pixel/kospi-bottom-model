@@ -1,0 +1,69 @@
+# 장중(평일 09:00~15:40 KST) 코스피 잠정 신호(live.json)를 약 5분 간격으로 계산해 live-data 브랜치에 올린다.
+# 사이트는 raw.githubusercontent.com의 live-data/live.json을 직접 읽는다(배포 없이 갱신).
+#
+# GitHub 예약 실행은 짧은 간격(*/10)일수록 자주 빠지거나 늦어져서, 한 번 시작된 실행이
+# 장 마감까지 안에서 5분마다 반복하는 방식으로 바꿨다. 예약은 시작용으로 여러 번 걸어 두고,
+# 이미 돌고 있으면 뒤 예약은 대기열에서 기다렸다가 장 마감 뒤 바로 끝난다.
+# 한 실행은 GitHub 제한(6시간) 안에서 최대 5시간 50분만 돈다.
+name: Intraday update
+
+on:
+  schedule:
+    - cron: "50 23 * * 0-4"     # 08:50 KST (월~금) 시작
+    - cron: "20 0-6 * * 1-5"    # 09:20~15:20 KST 매시: 앞 실행이 빠졌거나 끊겼을 때 다시 시작
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: intraday-update
+  cancel-in-progress: false
+
+jobs:
+  intraday:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install "pandas<3" numpy
+
+      - name: Loop until market close
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          deadline=$(( $(date +%s) + 350 * 60 ))
+          kst() { TZ=Asia/Seoul date +%H%M; }
+          dow=$(TZ=Asia/Seoul date +%u)
+          if [ "$dow" -ge 6 ]; then echo "주말"; exit 0; fi
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            now=$(kst)
+            if [ "$now" -ge 1540 ]; then echo "장 마감 시각 지남: $now"; break; fi
+            python intraday.py
+            rc=$?
+            if [ $rc -eq 0 ]; then
+              tmp=$(mktemp -d)
+              cp live.json "$tmp/"
+              (
+                cd "$tmp" && git init -q && git checkout -q -b live-data &&
+                git config user.name "github-actions[bot]" &&
+                git config user.email "41898282+github-actions[bot]@users.noreply.github.com" &&
+                git add live.json && git commit -qm "live $(TZ=Asia/Seoul date '+%F %H:%M') KST" &&
+                git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" live-data
+              ) && echo "올림: $(cat live.json | head -c 120)" || echo "::warning::live-data 푸시 실패"
+              rm -rf "$tmp"
+            elif [ $rc -eq 3 ]; then
+              if [ "$now" -ge 0915 ]; then echo "09:15이 지나도 오늘 시세가 없어 휴장으로 보고 종료"; break; fi
+              echo "건너뜀(장 시작 전)"
+            else
+              echo "::warning::intraday.py 실패 (rc=$rc), 다음 회차에 다시 시도"
+            fi
+            sleep 300
+          done

@@ -5,6 +5,7 @@
 - `kospi_bottom_model.py`: 데이터를 내려받아 `signals_daily.csv`(일별 판정)와 `report.md`(현재 상태, 과거 하락 구간 성적표)를 만듭니다. `kospi_history.csv`는 Yahoo 접속이 막힐 때 쓰는 지수 이력입니다.
 - `index.html`: 같은 폴더의 결과 파일을 자동으로 읽어 보여 주는 페이지입니다.
 - `.github/workflows/update.yml`: 평일 16:40(KST)에 스크립트를 돌려 결과를 커밋하고 GitHub Pages에 배포합니다.
+- `intraday.py`, `.github/workflows/intraday.yml`: 장중(평일 09:00~15:40 KST) 약 5분 간격으로 오늘 지수와 'EMA 60 + 판정' 매매 신호를 잠정 계산해 `live-data` 브랜치의 `live.json`에 올립니다(한 커밋만 유지). 사이트는 이 파일을 직접 읽어 '최근 판정'과 그래프 마지막 점에 표시합니다. 짧은 간격 예약 실행은 GitHub에서 자주 빠져서, 아침에 한 번 시작된 실행이 장 마감까지 안에서 반복합니다. 바닥 판정(6개 항목)은 전 거래일 종가 기준입니다.
 
 ## 자동 갱신 켜기 (처음 한 번)
 
