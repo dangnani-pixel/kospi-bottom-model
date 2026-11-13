@@ -31,4 +31,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           for d in lab/out data; do [ -e "$d" ] && git add -f "$d"; done; true
           git commit -m "lab outputs [skip ci]" || exit 0
-          git pull --rebase -q origin "${GITHUB_REF_NAME}" && git push -q origin "HEAD:${GITHUB_REF_NAME}"
+          git checkout -- . && git pull --rebase -q origin "${GITHUB_REF_NAME}" && git push -q origin "HEAD:${GITHUB_REF_NAME}"
