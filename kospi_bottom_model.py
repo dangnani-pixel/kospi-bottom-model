@@ -480,10 +480,10 @@ def main() -> int:
         vix = None
     df = v2.build_v2(df, vix)
     eps = episodes(df)
-    extra = v2.report_v2(df, eps, score, pct, v2.macro_snapshot(fred), v2.trade_backtest(df))
+    extra = v2.report_v2(df, eps, score, pct, v2.macro_snapshot(fred), v2.trade_backtest(df), v2.trade_split(df))
     cols = ["kospi", "state", "conditions_met", *COND_COLS,
             "drawdown_pct", "credit_spread", "usdkrw", "ust2y", "realized_vol", "ma6m", "pbr", "pbr_cut",
-            "v2_state", "v2_score", *v2.V2_GROUPS, "v2_adv_ratio10", "v2_foreign20_bn", "vix", "v2_per"]
+            "v2_state", "v2_score", *v2.V2_GROUPS, "v2_uptrend", "v2_adv_ratio10", "v2_foreign20_bn", "vix", "v2_per"]
     out = df[cols].copy()
     out = out[out["state"] != ""]
     out.index.name = "date"

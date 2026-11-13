@@ -43,7 +43,8 @@ V2_RULES = {
     "v2_value_ok": "코스피 PBR이 5년 분포 하위 30% 이하, 또는 PER이 5년 분포 하위 20% 이하",
     "v2_rates_ok": "미국 2년물 금리가 63거래일 전보다 낮음",
 }
-V2_STATES = [("회복 확인", "점수 5 이상 + 저점 상승 충족"), ("바닥 형성", "점수 4 이상"),
+V2_STATES = [("상승 추세", "종가가 60일 EMA 위이고 60일 EMA가 20거래일 전보다 높은 상태가 3거래일 연속(점수 5 이상 + 저점 상승이면 회복 확인)"),
+             ("회복 확인", "점수 5 이상 + 저점 상승 충족"), ("바닥 형성", "점수 4 이상"),
              ("바닥 탐색", "점수 3"), ("하락 진행", "점수 2 이하")]
 
 
@@ -206,6 +207,11 @@ def build_v2(df: pd.DataFrame, vix: pd.Series | None) -> pd.DataFrame:
     for c in V2_GROUPS:
         df[c] = _persist(raw[c], valid[c])
 
+    # 상승 추세: 바닥 점수는 하락 뒤 바닥을 찾는 용도라 상승장에서는 낮게 나온다. 추세가 살아 있으면 하락 판정을 내리지 않는다.
+    ema60 = px.ewm(span=60, adjust=False, min_periods=60).mean()
+    up = (px > ema60) & (ema60 > ema60.shift(20))
+    df["v2_uptrend"] = _persist(up, ema60.shift(20).notna())
+
     df["v2_score"] = df[V2_GROUPS].sum(axis=1, min_count=1)
     df["v2_known"] = df[V2_GROUPS].notna().sum(axis=1)
 
@@ -215,6 +221,8 @@ def build_v2(df: pd.DataFrame, vix: pd.Series | None) -> pd.DataFrame:
             return ""
         if s >= 5 and r["v2_price_ok"] == 1:
             return "회복 확인"
+        if r["v2_uptrend"] == 1:
+            return "상승 추세"
         if s >= 4:
             return "바닥 형성"
         if s >= 3:
@@ -222,7 +230,7 @@ def build_v2(df: pd.DataFrame, vix: pd.Series | None) -> pd.DataFrame:
         return "하락 진행"
 
     df["v2_state"] = df.apply(judge, axis=1)
-    df["v2_on"] = df["v2_state"].isin(["바닥 형성", "회복 확인"]).astype(int)
+    df["v2_on"] = df["v2_state"].isin(["바닥 형성", "회복 확인", "상승 추세"]).astype(int)
     return df
 
 
@@ -254,6 +262,36 @@ def trade_backtest(df: pd.DataFrame, years=(20, 10, 5, 3), cost: float = 0.00015
             yrs = (idx[-1] - idx[0]).days / 365.25
             row[y] = {"final": eq.iloc[-1], "cagr": (eq.iloc[-1] / 1e7) ** (1 / yrs) - 1,
                       "mdd": (eq / eq.cummax() - 1).min()}
+        rows.append(row)
+    return rows
+
+
+def trade_split(df: pd.DataFrame, periods=(("2002-04-01", "2014-12-31"), ("2015-01-01", None)), cost: float = 0.00015) -> list[dict]:
+    """기간을 나눠 같은 규칙을 따로 계산한다(앞 기간은 2002년 4월부터: 개선안 자료가 쌓이는 기간 이후)."""
+    px = df["kospi"]
+    ret = px.pct_change().fillna(0)
+    ema60 = px.ewm(span=60, adjust=False, min_periods=60).mean()
+    rules = {
+        "기존 판정 + EMA 60": (px > ema60) & (df["state"] != "하락 진행") & (df["state"] != ""),
+        "개선안(v2) + EMA 60": (px > ema60) & (df["v2_state"] != "하락 진행") & (df["v2_state"] != ""),
+        "기존 판정만": (df["state"] != "하락 진행") & (df["state"] != ""),
+        "개선안(v2)만": (df["v2_state"] != "하락 진행") & (df["v2_state"] != ""),
+    }
+    rows = []
+    for name, sig in list(rules.items()) + [("단순 보유", None)]:
+        row = {"rule": name}
+        for a, b in periods:
+            idx = px.loc[a:b].index
+            r = ret.loc[idx].copy()
+            r.iloc[0] = 0
+            if sig is None:
+                eq = 1e7 * (1 - cost) * (1 + r).cumprod()
+            else:
+                p = sig.shift(1).fillna(False).astype(float).loc[idx].copy()
+                p.iloc[0] = 0
+                eq = 1e7 * (1 + p * r - p.diff().abs().fillna(0) * cost).cumprod()
+            key = f"{idx[0]:%Y.%m}–{idx[-1]:%Y.%m}"
+            row[key] = {"final": eq.iloc[-1], "mdd": (eq / eq.cummax() - 1).min()}
         rows.append(row)
     return rows
 
@@ -295,7 +333,8 @@ def macro_snapshot(fred_fn) -> list[dict]:
 
 
 # ---------------------------------------------------------------- 리포트
-def report_v2(df: pd.DataFrame, eps: list[dict], score_fn, pct_fn, macro: list[dict], trades: list[dict]) -> list[str]:
+def report_v2(df: pd.DataFrame, eps: list[dict], score_fn, pct_fn, macro: list[dict], trades: list[dict],
+              split: list[dict] | None = None) -> list[str]:
     last = df[df["v2_state"] != ""].iloc[-1]
     L = ["## 개선안(v2) 판정 — 기존 판정과 나란히 비교 중", "",
          f"- 판정: **{last['v2_state']}** (점수 {int(last['v2_score'])} / {int(last['v2_known'])}, {last.name:%Y-%m-%d})",
@@ -310,7 +349,7 @@ def report_v2(df: pd.DataFrame, eps: list[dict], score_fn, pct_fn, macro: list[d
           "신용 스프레드·환율·VIX는 한 묶음으로 셌습니다. 임계값은 결과를 보기 전에 정한 초기값입니다.", ""]
 
     L += ["### 하락 구간별 신호 성적: 기존 vs 개선안", "",
-          "신호는 기존이 '바닥 확인 중·회복', 개선안이 '바닥 형성·회복 확인'으로 바뀐 날입니다.", "",
+          "신호는 기존이 '바닥 확인 중·회복', 개선안이 '바닥 형성·회복 확인·상승 추세'로 바뀐 날입니다.", "",
           "| 구간 | 최대 하락 | 기존 헛신호 | 기존 추가 하락 | 기존 지연 | 개선안 헛신호 | 개선안 추가 하락 | 개선안 지연 |",
           "|---|---:|---:|---:|---:|---:|---:|---:|"]
     agg = {"v1": [], "v2": []}
@@ -343,6 +382,15 @@ def report_v2(df: pd.DataFrame, eps: list[dict], score_fn, pct_fn, macro: list[d
     for r in trades:
         L.append(f"| {r['rule']} | " + " | ".join(f"{r[y]['final'] / 1e4:,.0f}만 원 ({r[y]['mdd'] * 100:.1f}%)" for y in years) + " |")
     L.append("")
+    if split:
+        keys = [k for k in split[0] if k != "rule"]
+        L += ["### 기간을 나눠 본 매매 백테스트", "",
+              "상승 추세 규칙은 2026-11-13에 전체 기간 결과(상승장에서 하락 진행이 많이 나옴)를 본 뒤 추가했습니다. "
+              "두 기간 모두에서 비슷하게 나오는지로 한쪽 기간에만 맞춘 것인지 가늠합니다.", "",
+              "| 규칙 | " + " | ".join(keys) + " |", "|---|" + "---:|" * len(keys)]
+        for r in split:
+            L.append(f"| {r['rule']} | " + " | ".join(f"{r[k]['final'] / 1e4:,.0f}만 원 ({r[k]['mdd'] * 100:.1f}%)" for k in keys) + " |")
+        L.append("")
 
     L += ["## 매크로 참고 (판정에는 넣지 않음)", "",
           "월별 자료는 발표가 1~2개월 늦습니다. 반도체 수출, 이익 전망(선행 PER·EPS 조정), 신용융자 잔고, VKOSPI, 한국 소비자물가는 "
