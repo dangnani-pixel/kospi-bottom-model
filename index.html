@@ -64,11 +64,8 @@ a.btn { text-decoration: none; display: inline-block; }
 @media (max-width: 720px) { .status { grid-template-columns: 1fr; } }
 .label { font-size: .74rem; font-weight: 600; letter-spacing: .06em; color: var(--muted); text-transform: uppercase; margin: 0 0 6px; }
 .big { font: 500 1.9rem/1.1 var(--f-mono); font-variant-numeric: tabular-nums; }
-.live { display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: center; border-left: 4px solid var(--accent); }
-.live .big { font-size: 1.6rem; }
-.live .up { color: var(--st-fall); } .live .down { color: var(--accent); }
+.up { color: var(--st-fall); } .down { color: var(--accent); }
 .live-tag { font-size: .72rem; font-weight: 700; letter-spacing: .04em; color: var(--st-bounce); border: 1px solid var(--st-bounce); border-radius: 4px; padding: 0 6px; margin-left: 6px; vertical-align: middle; }
-.live-sig { font-weight: 700; font-size: 1.05rem; }
 .meta { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; }
 .state-chip { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1.05rem; padding: 4px 12px 4px 10px;
   border-radius: 999px; border: 1.5px solid currentColor; margin-top: 10px; }
@@ -149,25 +146,12 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
   <div class="source" id="source"></div>
   <div class="err" id="err" hidden></div>
 
-  <section class="panel live" id="liveBox" hidden aria-live="polite">
-    <div>
-      <p class="label">장중 실시간 <span class="live-tag">잠정</span></p>
-      <div class="big" id="livePrice">–</div>
-      <div class="meta" id="liveChg">–</div>
-    </div>
-    <div>
-      <p class="label">EMA 60 매매 신호</p>
-      <div class="live-sig" id="liveSig">–</div>
-      <div class="meta" id="liveWhy">–</div>
-    </div>
-    <div class="meta" id="liveNote" style="max-width:38ch"></div>
-  </section>
-
   <section class="status">
     <div class="panel">
-      <p class="label">최근 판정</p>
+      <p class="label">최근 판정 <span class="live-tag" id="liveTag" hidden>장중 잠정</span></p>
       <div class="big" id="lastPrice">–</div>
       <div class="meta" id="lastDate">–</div>
+      <div class="meta" id="liveSig" hidden></div>
       <div id="stateChip"></div>
       <div class="meta" id="stateDur" style="margin-top:6px"></div>
       <div class="pbr" id="pbrBox" hidden>
@@ -328,7 +312,17 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
   function renderStatus() {
     const n = M.n, i = n - 1;
     $('lastPrice').textContent = fmtN(M.price.vals[i]);
-    $('lastDate').textContent = fmtD(M.dates[i]) + ' 기준 · ' + M.price.name;
+    const L = M.live;
+    const ld = $('lastDate'); ld.textContent = '';
+    if (L) {
+      const sp = document.createElement('span'); sp.className = L.change_pct >= 0 ? 'up' : 'down';
+      sp.textContent = (L.change_pct >= 0 ? '▲ ' : '▼ ') + Math.abs(L.change_pct).toFixed(2) + '%';
+      ld.append(sp, ` · ${L.time_kst} 장중 · 전일 종가 ${fmtN(L.prev_close)}`);
+      const sg = $('liveSig');
+      sg.textContent = `EMA ${L.ema_days} 매매 신호: ${L.signal} (지수 ${L.kospi > L.ema ? '>' : '≤'} EMA ${fmtN(L.ema)}, 판정·체크 항목은 ${L.state_date} 종가 기준)`;
+      sg.hidden = false;
+    } else { ld.textContent = fmtD(M.dates[i]) + ' 기준 · ' + M.price.name; $('liveSig').hidden = true; }
+    $('liveTag').hidden = !L;
     const chip = $('stateChip'); chip.innerHTML = '';
     if (M.state) {
       const st = stateOf(M.state.vals[i]);
@@ -539,7 +533,12 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     // price
     parts.push(`<path d="${pathOf(M.price.vals, s, e, x, y)}" fill="none" stroke="${css('--price')}" stroke-width="1.7" stroke-linejoin="round"/>`);
     const li = e - 1;
-    if (M.price.vals[li] != null) parts.push(`<circle cx="${x(li).toFixed(1)}" cy="${y(M.price.vals[li]).toFixed(1)}" r="3.5" fill="${css('--price')}"/>`);
+    if (M.price.vals[li] != null) {
+      const isLive = M.live && li === M.n - 1;
+      parts.push(isLive
+        ? `<circle cx="${x(li).toFixed(1)}" cy="${y(M.price.vals[li]).toFixed(1)}" r="4.5" fill="${css('--panel')}" stroke="${css('--st-bounce')}" stroke-width="2"/><text x="${(x(li) - 6).toFixed(1)}" y="${(y(M.price.vals[li]) - 9).toFixed(1)}" text-anchor="end" style="fill:${css('--st-bounce')};font-family:var(--f-body)">장중</text>`
+        : `<circle cx="${x(li).toFixed(1)}" cy="${y(M.price.vals[li]).toFixed(1)}" r="3.5" fill="${css('--price')}"/>`);
+    }
 
     // indicator sub-panel
     let subInfo = null;
@@ -636,7 +635,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     const i = Math.max(G.s, Math.min(G.e - 1, Math.round(G.s + ((px - G.L) / G.PW) * (G.cnt - 1))));
     const xi = G.x(i);
     cross.setAttribute('x1', xi); cross.setAttribute('x2', xi); cross.setAttribute('visibility', 'visible');
-    let h = `<div class="d">${fmtD(M.dates[i])}</div><div class="p">${fmtN(M.price.vals[i])}</div>`;
+    let h = `<div class="d">${fmtD(M.dates[i])}${M.live && i === M.n - 1 ? ' 장중 ' + M.live.time_kst.slice(11) + ' (잠정, 판정은 전일 기준)' : ''}</div><div class="p">${fmtN(M.price.vals[i])}</div>`;
     if (M.state) { const st = stateOf(M.state.vals[i]); if (st) h += `<div style="color:${css(st.v)};font-weight:700">${esc(M.state.vals[i])}</div>`; }
     G.mas.forEach((d, k) => { const v = ind('ma:' + d)[i]; h += `<div style="color:${css('--ma' + (k + 1))}">${d}일 EMA ${fmtShort(v)}</div>`; });
     if (G.bb && G.bb.up[i] != null) h += `<div style="color:${css('--accent')}">볼린저 ${fmtShort(G.bb.lo[i])} ~ ${fmtShort(G.bb.up[i])}</div>`;
@@ -788,28 +787,30 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
   try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => M && renderAll()); } catch (_) {}
   new MutationObserver(() => M && renderAll()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
-  // ---------- live (intraday, provisional) ----------
+  // ---------- live (intraday, provisional): append today's value as the latest point ----------
+  let M0 = null;
+  function withLive(B, L) {
+    const d = parseDate(L.time_kst);
+    if (!L || !d || !(d > B.dates[B.n - 1])) return B;
+    const last = B.n - 1, push = (arr, v) => [...arr, v];
+    return {
+      ...B, cache: null, n: B.n + 1, dates: push(B.dates, d), live: L,
+      price: { ...B.price, vals: push(B.price.vals, L.kospi) },
+      state: B.state ? { ...B.state, vals: push(B.state.vals, B.state.vals[last]) } : B.state,
+      conds: B.conds.map((c) => ({ ...c, vals: push(c.vals, c.vals[last]) })),
+      others: B.others.map((c) => ({ ...c, vals: push(c.vals, null) })),
+    };
+  }
   async function loadLive() {
     let L = null;
     try {
       const r = await fetch('live.json?t=' + Date.now(), { cache: 'no-store' });
       if (r.ok) L = await r.json();
     } catch (_) {}
-    const box = $('liveBox');
-    const lastClose = M ? fmtD(M.dates[M.n - 1]) : '';
-    if (!L || !L.time_kst || !(L.time_kst.slice(0, 10) > lastClose)) { box.hidden = true; return; }
-    box.hidden = false;
-    $('livePrice').textContent = fmtN(L.kospi);
-    const c = $('liveChg'), up = L.change_pct >= 0;
-    c.innerHTML = '';
-    const sp = document.createElement('span'); sp.className = up ? 'up' : 'down';
-    sp.textContent = (up ? '▲ ' : '▼ ') + Math.abs(L.change_pct).toFixed(2) + '%';
-    c.append(sp, ' · 전일 종가 ' + fmtN(L.prev_close) + ' · ' + L.time_kst + ' 기준');
-    const sig = $('liveSig');
-    sig.textContent = L.signal;
-    sig.style.color = css(L.signal === '보유' ? '--on' : '--muted');
-    $('liveWhy').textContent = `지수 ${L.kospi > L.ema ? '>' : '≤'} EMA ${L.ema_days} (${fmtN(L.ema)}) · 판정 ${L.state} (${L.state_date} 종가 기준)`;
-    $('liveNote').textContent = '장중 값으로 계산한 잠정 신호입니다. 종가 확정 뒤(16:40 이후) 사라지고 종가 기준으로 바뀝니다. 약 10분 간격 갱신이며 GitHub 사정으로 늦어질 수 있습니다.';
+    const next = L && L.time_kst ? withLive(M0, L) : M0;
+    if (next === M && !M.live) return;
+    M = next;
+    renderAll();
   }
 
   // ---------- boot: try sibling files (works under python -m http.server), else sample ----------
@@ -819,7 +820,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       if (!r.ok) throw 0;
       const t = await r.text();
       if (!/^﻿?[^\n]*,/.test(t) || /<html/i.test(t.slice(0, 200))) throw 0;
-      M = buildModel(t);
+      M = M0 = buildModel(t);
       try { const r2 = await fetch('report.md', { cache: 'no-store' }); if (r2.ok) { const m = await r2.text(); if (!/<html/i.test(m.slice(0, 200))) reportMd = m; } } catch (_) {}
       try { const r3 = await fetch('pbr_history.csv', { cache: 'no-store' }); if (r3.ok) { const p = await r3.text(); if (!/<html/i.test(p.slice(0, 200))) setPbr(p); } } catch (_) {}
       sourceDesc = '종가 데이터 · ' + `${M.n.toLocaleString('ko-KR')}거래일 · ${fmtD(M.dates[0])} ~ ${fmtD(M.dates[M.n - 1])}`;
