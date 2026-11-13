@@ -1,0 +1,58 @@
+# 장중(평일 09:00~15:40 KST)에 10분 간격으로 코스피 잠정 신호(live.json)를 계산해 GitHub Pages에 배포한다.
+# 저장소에는 커밋하지 않는다. 장 마감 뒤 Daily update가 배포하면 live.json은 사이트에서 빠지고 종가 기준으로 돌아간다.
+# GitHub 예약 실행은 몇 분~수십 분 늦어질 수 있어 실제 간격은 10분보다 길 수 있다.
+name: Intraday update
+
+on:
+  schedule:
+    - cron: "*/10 0-6 * * 1-5"   # UTC 00:00~06:50 = KST 09:00~15:50 (스크립트가 15:40 이후는 건너뜀)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: intraday-update
+  cancel-in-progress: true
+
+jobs:
+  intraday:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install "pandas<3" numpy
+
+      - name: Compute live signal
+        id: live
+        run: |
+          set +e
+          python intraday.py
+          rc=$?
+          if [ $rc -eq 0 ]; then echo "ok=1" >> "$GITHUB_OUTPUT"; elif [ $rc -eq 3 ]; then echo "ok=0" >> "$GITHUB_OUTPUT"; else exit $rc; fi
+
+      - name: Collect site files
+        if: steps.live.outputs.ok == '1'
+        run: |
+          mkdir -p _site
+          cp index.html signals_daily.csv report.md pbr_history.csv live.json _site/
+
+      - uses: actions/configure-pages@v5
+        if: steps.live.outputs.ok == '1'
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.live.outputs.ok == '1'
+        with:
+          path: _site
+      - id: deploy
+        if: steps.live.outputs.ok == '1'
+        uses: actions/deploy-pages@v4

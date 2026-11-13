@@ -65,6 +65,11 @@ h1 { font-size: 1.6rem; line-height: 1.25; margin: 0; letter-spacing: -.01em; te
 @media (max-width: 720px) { .status { grid-template-columns: 1fr; } }
 .label { font-size: .74rem; font-weight: 600; letter-spacing: .06em; color: var(--muted); text-transform: uppercase; margin: 0 0 6px; }
 .big { font: 500 1.9rem/1.1 var(--f-mono); font-variant-numeric: tabular-nums; }
+.live { display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: center; border-left: 4px solid var(--accent); }
+.live .big { font-size: 1.6rem; }
+.live .up { color: var(--st-fall); } .live .down { color: var(--accent); }
+.live-tag { font-size: .72rem; font-weight: 700; letter-spacing: .04em; color: var(--st-bounce); border: 1px solid var(--st-bounce); border-radius: 4px; padding: 0 6px; margin-left: 6px; vertical-align: middle; }
+.live-sig { font-weight: 700; font-size: 1.05rem; }
 .meta { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; }
 .state-chip { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1.05rem; padding: 4px 12px 4px 10px;
   border-radius: 999px; border: 1.5px solid currentColor; margin-top: 10px; }
@@ -148,6 +153,20 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
   </header>
   <div class="source" id="source"></div>
   <div class="err" id="err" hidden></div>
+
+  <section class="panel live" id="liveBox" hidden aria-live="polite">
+    <div>
+      <p class="label">장중 실시간 <span class="live-tag">잠정</span></p>
+      <div class="big" id="livePrice">–</div>
+      <div class="meta" id="liveChg">–</div>
+    </div>
+    <div>
+      <p class="label">EMA 60 매매 신호</p>
+      <div class="live-sig" id="liveSig">–</div>
+      <div class="meta" id="liveWhy">–</div>
+    </div>
+    <div class="meta" id="liveNote" style="max-width:38ch"></div>
+  </section>
 
   <section class="status">
     <div class="panel">
@@ -839,6 +858,30 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     renderAll();
   }
 
+  // ---------- live (intraday, provisional) ----------
+  async function loadLive() {
+    let L = null;
+    try {
+      const r = await fetch('live.json?t=' + Date.now(), { cache: 'no-store' });
+      if (r.ok) L = await r.json();
+    } catch (_) {}
+    const box = $('liveBox');
+    const lastClose = M ? fmtD(M.dates[M.n - 1]) : '';
+    if (!L || !L.time_kst || !(L.time_kst.slice(0, 10) > lastClose)) { box.hidden = true; return; }
+    box.hidden = false;
+    $('livePrice').textContent = fmtN(L.kospi);
+    const c = $('liveChg'), up = L.change_pct >= 0;
+    c.innerHTML = '';
+    const sp = document.createElement('span'); sp.className = up ? 'up' : 'down';
+    sp.textContent = (up ? '▲ ' : '▼ ') + Math.abs(L.change_pct).toFixed(2) + '%';
+    c.append(sp, ' · 전일 종가 ' + fmtN(L.prev_close) + ' · ' + L.time_kst + ' 기준');
+    const sig = $('liveSig');
+    sig.textContent = L.signal;
+    sig.style.color = css(L.signal === '보유' ? '--on' : '--muted');
+    $('liveWhy').textContent = `지수 ${L.kospi > L.ema ? '>' : '≤'} EMA ${L.ema_days} (${fmtN(L.ema)}) · 판정 ${L.state} (${L.state_date} 종가 기준)`;
+    $('liveNote').textContent = '장중 값으로 계산한 잠정 신호입니다. 종가 확정 뒤(16:40 이후) 사라지고 종가 기준으로 바뀝니다. 약 10분 간격 갱신이며 GitHub 사정으로 늦어질 수 있습니다.';
+  }
+
   // ---------- boot: try sibling files (works under python -m http.server), else sample ----------
   (async () => {
     try {
@@ -851,6 +894,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       try { const r3 = await fetch('pbr_history.csv', { cache: 'no-store' }); if (r3.ok) { const p = await r3.text(); if (!/<html/i.test(p.slice(0, 200))) setPbr(p); } } catch (_) {}
       sourceDesc = '같은 폴더에서 자동으로 불러옴: <b>signals_daily.csv' + (reportMd ? ', report.md' : '') + '</b>' + ` · ${M.n.toLocaleString('ko-KR')}거래일 · ${fmtD(M.dates[0])} ~ ${fmtD(M.dates[M.n - 1])}`;
       renderAll();
+      loadLive(); setInterval(loadLive, 5 * 60 * 1000);
     } catch (_) { loadSample(); }
   })();
 })();
