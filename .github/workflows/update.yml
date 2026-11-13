@@ -46,12 +46,12 @@ jobs:
       - name: Commit new data
         if: steps.model.outcome == 'success'
         run: |
-          if git diff --quiet -- signals_daily.csv pbr_history.csv; then
+          if git diff --quiet -- signals_daily.csv pbr_history.csv data/ && [ -z "$(git ls-files --others --exclude-standard data/)" ]; then
             echo "No new trading day; nothing to commit."
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add signals_daily.csv report.md kospi_history.csv pbr_history.csv
+            git add signals_daily.csv report.md kospi_history.csv pbr_history.csv data/
             git commit -m "Update signals $(date -u +%Y-%m-%d)"
             git push
           fi
