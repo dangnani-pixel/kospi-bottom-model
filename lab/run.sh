@@ -1,2 +1,4 @@
 set -e
-python lab/fetch_history.py 260
+python kospi_bottom_model.py
+mkdir -p lab/out
+cp report.md signals_daily.csv lab/out/
