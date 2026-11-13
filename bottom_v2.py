@@ -277,7 +277,7 @@ def macro_snapshot(fred_fn) -> list[dict]:
             if how == "yoy":
                 prev = s[s.index <= d - pd.DateOffset(years=1)]
                 chg, unit = (last / float(prev.iloc[-1]) - 1) * 100 if len(prev) else np.nan, "전년 대비 %"
-                val = f"{last / 1e9:,.1f}억 달러"
+                val = f"{last / 1e8:,.0f}억 달러"
             elif how == "chg3":
                 prev = s[s.index <= d - pd.DateOffset(months=3)]
                 chg, unit = (last - float(prev.iloc[-1])) if len(prev) else np.nan, "3개월 변화 %p"
