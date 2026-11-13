@@ -789,6 +789,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
 
   // ---------- live (intraday, provisional): append today's value as the latest point ----------
   let M0 = null;
+  const LIVE_URL = 'https://raw.githubusercontent.com/dangnani-pixel/kospi-bottom-model/live-data/live.json';
   function withLive(B, L) {
     const d = parseDate(L.time_kst);
     if (!L || !d || !(d > B.dates[B.n - 1])) return B;
@@ -802,11 +803,16 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     };
   }
   async function loadLive() {
+    // 장중 값은 live-data 브랜치에서 직접 읽는다(약 5분 간격 갱신). 실패하면 사이트에 함께 배포된 live.json을 쓴다.
     let L = null;
-    try {
-      const r = await fetch('live.json?t=' + Date.now(), { cache: 'no-store' });
-      if (r.ok) L = await r.json();
-    } catch (_) {}
+    for (const u of [LIVE_URL, 'live.json']) {
+      try {
+        const r = await fetch(u + '?t=' + Date.now(), { cache: 'no-store' });
+        if (!r.ok) continue;
+        const j = await r.json();
+        if (j && j.time_kst && (!L || j.time_kst > L.time_kst)) L = j;
+      } catch (_) {}
+    }
     const next = L && L.time_kst ? withLive(M0, L) : M0;
     if (next === M && !M.live) return;
     M = next;
@@ -825,7 +831,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       try { const r3 = await fetch('pbr_history.csv', { cache: 'no-store' }); if (r3.ok) { const p = await r3.text(); if (!/<html/i.test(p.slice(0, 200))) setPbr(p); } } catch (_) {}
       sourceDesc = '종가 데이터 · ' + `${M.n.toLocaleString('ko-KR')}거래일 · ${fmtD(M.dates[0])} ~ ${fmtD(M.dates[M.n - 1])}`;
       renderAll();
-      loadLive(); setInterval(loadLive, 5 * 60 * 1000);
+      loadLive(); setInterval(loadLive, 2 * 60 * 1000);
     } catch (_) { showErr('데이터를 불러오지 못했습니다. 잠시 뒤 새로고침해 주세요.'); }
   })();
 })();
