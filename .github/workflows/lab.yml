@@ -1,0 +1,34 @@
+# 실험용: 작업 브랜치에 push하면 lab/run.sh를 실행하고 결과(lab/out)를 같은 브랜치에 [skip ci]로 커밋한다.
+name: Lab
+on:
+  push:
+    branches: [claude/happy-knuth-3d8dv4]
+    paths: ["lab/**", ".github/workflows/lab.yml"]
+permissions:
+  contents: write
+concurrency:
+  group: lab
+  cancel-in-progress: true
+jobs:
+  lab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "pandas<3" numpy "pykrx==1.2.9"
+      - name: Run
+        env:
+          KRX_ID: ${{ secrets.KRX_ID }}
+          KRX_PW: ${{ secrets.KRX_PW }}
+        run: bash lab/run.sh
+      - name: Save outputs
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f lab/out lab/data 2>/dev/null || true
+          git commit -m "lab outputs [skip ci]" || exit 0
+          git pull --rebase -q origin "${GITHUB_REF_NAME}" && git push -q origin "HEAD:${GITHUB_REF_NAME}"
