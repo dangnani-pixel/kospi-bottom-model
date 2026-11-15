@@ -90,6 +90,18 @@ a.btn { text-decoration: none; display: inline-block; }
 .tools { margin-bottom: 8px; gap: 8px 18px; }
 .ctl { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .ctl label { color: var(--ink); font-weight: 500; }
+.ctl-name { color: var(--ink); font-weight: 500; }
+.ma-rows { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.ma-row { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.ma-row i { width: 12px; height: 3px; border-radius: 2px; display: inline-block; }
+.ma-row select { padding: 2px 4px; font-size: .8rem; }
+.ma-row input { width: 3.6em; padding: 2px 6px; font: .82rem var(--f-mono); border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--ink); }
+.ma-row .unit { font-size: .8rem; color: var(--muted); }
+.ma-row .x { border: 0; background: none; color: var(--muted); font-size: 1rem; cursor: pointer; padding: 0 4px; line-height: 1; }
+.ma-row .x:hover { color: var(--st-fall); }
+.chips { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: 500 .82rem var(--f-body); border: 1px solid var(--line); background: var(--panel); color: var(--muted); padding: 4px 10px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--panel); }
 .ctl label.soft { color: var(--muted); font-weight: 400; cursor: pointer; }
 input[type="checkbox"] { accent-color: var(--accent); margin: 0; }
 input[type="text"] { font: .85rem var(--f-mono); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); width: 9.5em; }
@@ -174,17 +186,16 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     </div>
     <div class="ctrls tools">
       <select id="overlay" hidden><option value="">없음</option></select>
-      <span class="ctl"><label for="maType">이동평균</label>
-        <select id="maType" aria-label="이동평균 종류"><option value="EMA">EMA (지수)</option><option value="SMA">SMA (단순)</option><option value="HMA">HMA (헐)</option></select>
-        <input id="maDays" type="text" inputmode="numeric" value="60" autocomplete="off" size="11" aria-describedby="maHelp"> <span id="maHelp">일 (쉼표로 최대 4개)</span></span>
-      <span class="ctl"><label for="ind">기술적 지표</label>
-        <select id="ind">
-          <option value="">없음</option>
-          <option value="bb">볼린저 밴드 (20일, 2σ)</option>
-          <option value="rsi">RSI (14일)</option>
-          <option value="macd">MACD (12, 26, 9)</option>
-          <option value="disp">이격도 (20일)</option>
-        </select></span>
+      <span class="ctl ma-box"><span class="ctl-name">이동평균</span>
+        <span id="maRows" class="ma-rows"></span>
+        <button class="btn small" id="maAdd" type="button" aria-label="이동평균 추가">+ 추가</button></span>
+      <span class="ctl"><span class="ctl-name">보조지표</span>
+        <span class="chips" id="indChips" role="group" aria-label="보조지표 (여러 개 선택 가능)">
+          <button type="button" data-ind="bb" aria-pressed="false">볼린저</button>
+          <button type="button" data-ind="rsi" aria-pressed="false">RSI</button>
+          <button type="button" data-ind="macd" aria-pressed="false">MACD</button>
+          <button type="button" data-ind="disp" aria-pressed="false">이격도</button>
+        </span></span>
       <input id="allStates" type="checkbox" hidden>
     </div>
     <div class="range-info"><span id="rangeInfo"></span><span class="hint" id="panHint"></span><button class="btn small" id="latestBtn" type="button" hidden>최근으로</button></div>
@@ -364,14 +375,22 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     const d = a.map((x, i) => (x == null || b[i] == null ? null : 2 * x - b[i]));
     return wma(d, Math.max(1, Math.floor(Math.sqrt(n))));
   }
-  let maType = 'EMA';
-  try { const t = localStorage.getItem('ma-type'); if (['EMA', 'SMA', 'HMA'].includes(t)) maType = t; } catch (_) {}
-  function ind(key0) {
-    const key = key0.startsWith('ma:') ? maType + key0 : key0;
+  // 이동평균: 종류·기간이 다른 선을 최대 4개까지. 보조지표: 여러 개를 함께 표시
+  const MA_TYPES = ['EMA', 'SMA', 'HMA'], MA_MAX = 4;
+  let MAS = [{ type: 'EMA', n: 60 }], INDS = new Set();
+  try {
+    const a = JSON.parse(localStorage.getItem('ma-list') || 'null');
+    if (Array.isArray(a)) MAS = a.filter((m) => MA_TYPES.includes(m.type) && m.n >= 2 && m.n <= 500).slice(0, MA_MAX);
+    const b = JSON.parse(localStorage.getItem('ind-list') || '[]');
+    if (Array.isArray(b)) INDS = new Set(b.filter((k) => ['bb', 'rsi', 'macd', 'disp'].includes(k)));
+  } catch (_) {}
+  const saveUi = () => { try { localStorage.setItem('ma-list', JSON.stringify(MAS)); localStorage.setItem('ind-list', JSON.stringify([...INDS])); } catch (_) {} };
+  const maKey = (m) => 'ma:' + m.type + ':' + m.n;
+  function ind(key) {
     M.cache = M.cache || {};
     if (M.cache[key]) return M.cache[key];
     const p = M.price.vals; let r;
-    if (key0.startsWith('ma:')) { const n = +key0.slice(3); r = maType === 'SMA' ? sma(p, n) : maType === 'HMA' ? hma(p, n) : ema(p, n); }
+    if (key.startsWith('ma:')) { const [, t, n0] = key.split(':'), n = +n0; r = t === 'SMA' ? sma(p, n) : t === 'HMA' ? hma(p, n) : ema(p, n); }
     else if (key === 'bb') {
       const m = sma(p, 20);
       const sd = m.map((mv, i) => { if (mv == null) return null; let s = 0; for (let j = i - 19; j <= i; j++) s += (p[j] - mv) ** 2; return Math.sqrt(s / 20); });
@@ -389,7 +408,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     return (M.cache[key] = r);
   }
   function maList() {
-    return [...new Set(($('maDays').value.match(/\d+/g) || []).map(Number).filter((n) => n >= 2 && n <= 500))].slice(0, 4);
+    return MAS.map((m, k) => ({ ...m, k })).filter((m) => Number.isFinite(m.n) && m.n >= 2 && m.n <= 500);
   }
 
   // ---------- visible window ----------
@@ -424,18 +443,17 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     const narrow = W < 560;
     const L = narrow ? 84 : 104, R = overlay ? 52 : 14, T = 10;
     const PH = narrow ? 230 : 300, rowH = 15, gap = 4;
-    const indKey = $('ind').value;
-    const sub = ['rsi', 'macd', 'disp'].includes(indKey);
-    const SUBH = sub ? 86 : 0, subTop = T + PH + 44;
+    const subs = ['rsi', 'macd', 'disp'].filter((k) => INDS.has(k));
+    const SUBH = 86, SUBGAP = 34, subTop0 = T + PH + 44;
     const nC = M.conds.length;
-    const stripTop = T + PH + (sub ? 44 + SUBH + 34 : 44);
+    const stripTop = T + PH + 44 + subs.length * (SUBH + SUBGAP);
     const H = stripTop + nC * (rowH + gap) + 6;
     const [s, e] = viewRange();
     const cnt = e - s, PW = W - L - R;
     const x = (i) => L + ((i - s) / Math.max(1, cnt - 1)) * PW;
     const mas = maList();
-    const bb = indKey === 'bb' ? ind('bb') : null;
-    const lines = [M.price.vals, ...(M.ohlc ? [M.ohlc.h, M.ohlc.l] : []), ...mas.map((d) => ind('ma:' + d)), ...(bb ? [bb.up, bb.lo] : [])];
+    const bb = INDS.has('bb') ? ind('bb') : null;
+    const lines = [M.price.vals, ...(M.ohlc ? [M.ohlc.h, M.ohlc.l] : []), ...mas.map((m) => ind(maKey(m))), ...(bb ? [bb.up, bb.lo] : [])];
     let lo = Infinity, hi = -Infinity;
     for (const arr of lines) for (let i = s; i < e; i++) { const v = arr[i]; if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }
     if (!isFinite(lo)) { lo = 0; hi = 1; }
@@ -486,7 +504,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     const minGap = mode === 'w' ? 40 : mode.startsWith('y') ? 40 : 58;
     const wk = (d) => Math.floor((d.getTime() / 864e5 + 3) / 7);
     let lastX = -99;
-    const tickBottom = sub ? subTop + SUBH : T + PH;
+    const tickBottom = subs.length ? subTop0 + (subs.length - 1) * (SUBH + SUBGAP) + SUBH : T + PH;
     for (let i = s + 1; i < e; i++) {
       const a = M.dates[i - 1], b = M.dates[i];
       const Y = b.getUTCFullYear(), Mo = b.getUTCMonth();
@@ -526,7 +544,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       parts.push(`<path d="${pathOf(bb.mid, s, e, x, y)}" fill="none" stroke="${css('--accent')}" stroke-width="1" stroke-dasharray="3 3" stroke-opacity=".7"/>`);
     }
     // moving averages
-    mas.forEach((d, k) => parts.push(`<path d="${pathOf(ind('ma:' + d), s, e, x, y)}" fill="none" stroke="${css('--ma' + (k + 1))}" stroke-width="1.3" stroke-opacity=".95"/>`));
+    mas.forEach((m) => parts.push(`<path d="${pathOf(ind(maKey(m)), s, e, x, y)}" fill="none" stroke="${css('--ma' + (m.k + 1))}" stroke-width="1.3" stroke-opacity=".95"/>`));
     // price
     if (M.ohlc) {
       // OHLC 바: 세로선 = 고가~저가, 왼쪽 눈금 = 시가, 오른쪽 눈금 = 종가. 오르면 빨강, 내리면 파랑
@@ -554,10 +572,10 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
         : `<circle cx="${x(li).toFixed(1)}" cy="${y(M.price.vals[li]).toFixed(1)}" r="3.5" fill="${css('--price')}"/>`);
     }
 
-    // indicator sub-panel
-    let subInfo = null;
-    if (sub) {
-      const top = subTop, bot = subTop + SUBH;
+    // indicator sub-panels (stacked)
+    const subInfos = [];
+    subs.forEach((indKey, si) => {
+      const top = subTop0 + si * (SUBH + SUBGAP);
       let series = [], ylo, yhi, refs, title, hist = null;
       if (indKey === 'rsi') { series = [[ind('rsi'), '--accent']]; ylo = 0; yhi = 100; refs = [30, 70]; title = 'RSI 14'; }
       else if (indKey === 'disp') { series = [[ind('disp'), '--accent']]; refs = [100]; title = '이격도 20'; }
@@ -585,8 +603,8 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       }
       series.forEach(([arr, tok]) => parts.push(`<path d="${pathOf(arr, s, e, x, ys)}" fill="none" stroke="${css(tok)}" stroke-width="1.3"/>`));
       parts.push(`<text class="cname" x="${L}" y="${top - 6}">${title}</text>`);
-      subInfo = { title, series, hist };
-    }
+      subInfos.push({ title, series, hist });
+    });
 
     // condition strips
     M.conds.forEach((c, k) => {
@@ -607,7 +625,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     parts.push(`<line id="cross" x1="0" x2="0" y1="${T}" y2="${H - 6}" stroke="${css('--muted')}" stroke-width="1" visibility="hidden"/>`);
 
     host.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${esc(M.price.name)} 추이와 판정 구간">${parts.join('')}</svg><div class="tip" id="tip" hidden></div>`;
-    G = { W, L, R, PW, s, e, cnt, x, ov, mas, bb, subInfo, indKey };
+    G = { W, L, R, PW, s, e, cnt, x, ov, mas, bb, subInfos };
     host.classList.toggle('pannable', !!rangeDays);
 
     // range line under the buttons
@@ -628,9 +646,9 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       const hit = [...seen].find((v) => st.re.test(v)); if (hit) add(css(st.v), hit + ' 구간', st.key === 'fall' ? .8 : .55);
     });
     if (nC) add(css('--on'), '조건 충족', 1);
-    mas.forEach((d, k) => add(css('--ma' + (k + 1)), d + (M.weekly ? '주' : '일') + ' ' + maType, 1, true));
-    if (bb) add(css('--accent'), '볼린저 밴드 20일 ±2σ', .8, true);
-    if (indKey === 'macd') { add(css('--accent'), 'MACD', 1, true); add(css('--ma1'), '시그널', 1, true); }
+    mas.forEach((m) => add(css('--ma' + (m.k + 1)), m.n + (M.weekly ? '주' : '일') + ' ' + m.type, 1, true));
+    if (bb) add(css('--accent'), '볼린저 밴드 20' + (M.weekly ? '주' : '일') + ' ±2σ', .8, true);
+    if (subs.includes('macd')) { add(css('--accent'), 'MACD', 1, true); add(css('--ma1'), '시그널', 1, true); }
     if (ov) add(css('--accent'), ov.name + ' (오른쪽 축)', .9, true);
   }
 
@@ -651,11 +669,11 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     cross.setAttribute('x1', xi); cross.setAttribute('x2', xi); cross.setAttribute('visibility', 'visible');
     let h = `<div class="d">${M.weekly ? fmtD(M.wstart[i]) + ' 주 ~ ' : ''}${fmtD(M.dates[i])}${M.live && i === M.n - 1 ? ' 장중 ' + M.live.time_kst.slice(11) + ' (잠정, 판정은 전일 기준)' : ''}</div><div class="p">${fmtN(M.price.vals[i])}</div>${M.ohlc ? `<div>시 ${fmtShort(M.ohlc.o[i])} · 고 ${fmtShort(M.ohlc.h[i])} · 저 ${fmtShort(M.ohlc.l[i])}</div>` : ''}`;
     if (M.state) { const st = stateOf(M.state.vals[i]); if (st) h += `<div style="color:${css(st.v)};font-weight:700">${esc(M.state.vals[i])}</div>`; }
-    G.mas.forEach((d, k) => { const v = ind('ma:' + d)[i]; h += `<div style="color:${css('--ma' + (k + 1))}">${d}${M.weekly ? '주' : '일'} ${maType} ${fmtShort(v)}</div>`; });
+    G.mas.forEach((m) => { const v = ind(maKey(m))[i]; h += `<div style="color:${css('--ma' + (m.k + 1))}">${m.n}${M.weekly ? '주' : '일'} ${m.type} ${fmtShort(v)}</div>`; });
     if (G.bb && G.bb.up[i] != null) h += `<div style="color:${css('--accent')}">볼린저 ${fmtShort(G.bb.lo[i])} ~ ${fmtShort(G.bb.up[i])}</div>`;
-    if (G.subInfo) {
-      const vals = G.subInfo.series.map(([arr]) => fmtShort(arr[i]));
-      h += `<div style="color:${css('--accent')}">${G.subInfo.title}: ${vals.join(' / ')}${G.subInfo.hist ? ' (히스토그램 ' + fmtShort(G.subInfo.hist[i]) + ')' : ''}</div>`;
+    for (const si of G.subInfos) {
+      const vals = si.series.map(([arr]) => fmtShort(arr[i]));
+      h += `<div style="color:${css('--accent')}">${si.title}: ${vals.join(' / ')}${si.hist ? ' (히스토그램 ' + fmtShort(si.hist[i]) + ')' : ''}</div>`;
     }
     if (G.ov) h += `<div style="color:${css('--accent')}">${esc(G.ov.name)}: ${fmtShort(G.ov.vals[i])}</div>`;
     if (M.conds.length) h += '<div style="margin-top:4px">' + M.conds.map((c) => `${c.vals[i] === 1 ? '✓' : c.vals[i] === 0 ? '·' : '?'} ${esc(condLabel(c.name))}`).join('<br>') + '</div>';
@@ -794,15 +812,35 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
   });
   $('latestBtn').addEventListener('click', () => { endIdx = null; if (M) renderChart(); });
   $('overlay').addEventListener('change', (e) => { overlay = e.target.value; if (M) renderChart(); });
-  $('ind').addEventListener('change', () => { if (M) renderChart(); });
-  $('allStates').addEventListener('change', () => { if (M) renderChart(); });
-  $('maDays').addEventListener('input', () => { if (M) schedule(); });
-  $('maType').value = maType;
-  $('maType').addEventListener('change', (e) => {
-    maType = e.target.value;
-    try { localStorage.setItem('ma-type', maType); } catch (_) {}
-    if (M) renderChart();
+  function renderChips() { document.querySelectorAll('#indChips button').forEach((b) => b.setAttribute('aria-pressed', INDS.has(b.dataset.ind))); }
+  $('indChips').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    const k = b.dataset.ind; INDS.has(k) ? INDS.delete(k) : INDS.add(k);
+    saveUi(); renderChips(); if (M) renderChart();
   });
+  function renderMaRows() {
+    const box = $('maRows'); box.innerHTML = '';
+    const unit = tf === 'week' ? '주' : '일';
+    MAS.forEach((m, k) => {
+      const row = document.createElement('span'); row.className = 'ma-row';
+      row.innerHTML = `<i style="background:${css('--ma' + (k + 1))}"></i>
+        <select aria-label="이동평균 ${k + 1} 종류">${MA_TYPES.map((t) => `<option${t === m.type ? ' selected' : ''}>${t}</option>`).join('')}</select>
+        <input type="number" min="2" max="500" step="1" inputmode="numeric" value="${m.n}" aria-label="이동평균 ${k + 1} 기간"><span class="unit">${unit}</span>
+        <button type="button" class="x" aria-label="이동평균 ${k + 1} 삭제" title="삭제">×</button>`;
+      row.querySelector('select').addEventListener('change', (e) => { m.type = e.target.value; saveUi(); M && renderChart(); });
+      row.querySelector('input').addEventListener('input', (e) => { m.n = Math.round(+e.target.value); saveUi(); M && schedule(); });
+      row.querySelector('.x').addEventListener('click', () => { MAS.splice(k, 1); saveUi(); renderMaRows(); M && renderChart(); });
+      box.appendChild(row);
+    });
+    $('maAdd').disabled = MAS.length >= MA_MAX;
+    $('maAdd').title = MAS.length >= MA_MAX ? '최대 ' + MA_MAX + '개' : '';
+  }
+  $('maAdd').addEventListener('click', () => {
+    if (MAS.length >= MA_MAX) return;
+    const used = new Set(MAS.map((m) => m.n)), next = [20, 60, 120, 5, 200].find((n) => !used.has(n)) || 20;
+    MAS.push({ type: MAS.length ? MAS[MAS.length - 1].type : 'EMA', n: next }); saveUi(); renderMaRows(); M && renderChart();
+  });
+  $('allStates').addEventListener('change', () => { if (M) renderChart(); });
   let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => M && renderChart(), 120); });
   try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => M && renderAll()); } catch (_) {}
   new MutationObserver(() => M && renderAll()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
@@ -878,7 +916,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     tf = next;
     try { localStorage.setItem('chart-tf', tf); } catch (_) {}
     document.querySelectorAll('#tfSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.tf === tf));
-    $('maHelp').textContent = (tf === 'week' ? '주' : '일') + ' (쉼표로 최대 4개)';
+    renderMaRows();
     if (tf === 'week' && !W0 && M0) {
       try { W0 = buildWeekly(M0, await loadOhlc()); showErr(''); }
       catch (e) { showErr(e.message); tf = 'day'; return setTf('day'); }
@@ -917,6 +955,8 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     applyModel();
     renderAll();
   }
+
+  renderMaRows(); renderChips();
 
   // ---------- boot: try sibling files (works under python -m http.server), else sample ----------
   (async () => {
