@@ -7,7 +7,7 @@ on:
   workflow_dispatch:          # Actions 탭에서 수동 실행
   push:
     branches: [main]
-    paths: ["index.html", "kospi_bottom_model.py", "intraday.py", "backtest/**", ".github/workflows/update.yml"]
+    paths: ["index.html", "kosdaq.html", "kosdaq.py", "kospi_bottom_model.py", "intraday.py", "backtest/**", ".github/workflows/update.yml"]
 
 permissions:
   contents: write
@@ -43,15 +43,19 @@ jobs:
           KRX_PW: ${{ secrets.KRX_PW }}
         run: python kospi_bottom_model.py
 
+      - name: KOSDAQ index
+        continue-on-error: true
+        run: python kosdaq.py
+
       - name: Commit new data
         if: steps.model.outcome == 'success'
         run: |
-          if git diff --quiet -- signals_daily.csv pbr_history.csv; then
+          if git diff --quiet -- signals_daily.csv pbr_history.csv kosdaq_daily.csv && [ -z "$(git ls-files --others --exclude-standard kosdaq_daily.csv)" ]; then
             echo "No new trading day; nothing to commit."
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add signals_daily.csv report.md kospi_history.csv pbr_history.csv
+            git add signals_daily.csv report.md kospi_history.csv pbr_history.csv kosdaq_daily.csv
             git commit -m "Update signals $(date -u +%Y-%m-%d)"
             git push
           fi
@@ -60,9 +64,11 @@ jobs:
         run: |
           mkdir -p _site/backtest
           cp index.html signals_daily.csv report.md pbr_history.csv _site/
+          cp kosdaq.html _site/; [ -f kosdaq_daily.csv ] && cp kosdaq_daily.csv _site/ || true
           cp backtest/*.pdf _site/backtest/
           # 장중에 이 워크플로가 돌면(코드 수정 push 등) 장중 잠정 값도 함께 배포해 실시간 패널이 사라지지 않게 한다
           python intraday.py && cp live.json _site/ || true
+          [ -f kosdaq_live.json ] && cp kosdaq_live.json _site/ || true
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

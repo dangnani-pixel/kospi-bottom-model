@@ -56,7 +56,26 @@ def main() -> int:
     }
     (OUT / "live.json").write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
     print(json.dumps(out, ensure_ascii=False))
+    kosdaq_live(now, today)
     return 0
+
+
+def kosdaq_live(now: pd.Timestamp, today: pd.Timestamp) -> None:
+    """코스닥 장중 값(kosdaq_live.json). 실패해도 코스피 쪽에는 영향 없음."""
+    try:
+        from kosdaq import FILE, naver_index
+        q = naver_index("KOSDAQ")
+        if q.index[-1] != today:
+            return
+        hist = pd.read_csv(FILE, index_col=0, parse_dates=True)["kosdaq"] if FILE.exists() else q.iloc[:-1]
+        hist = hist[hist.index < today]
+        price, prev = float(q.iloc[-1]), float(hist.iloc[-1])
+        out = {"time_kst": now.strftime("%Y-%m-%d %H:%M"), "kosdaq": round(price, 2), "prev_close": round(prev, 2),
+               "prev_date": f"{hist.index[-1]:%Y-%m-%d}", "change_pct": round((price / prev - 1) * 100, 2), "provisional": True}
+        (OUT / "kosdaq_live.json").write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(json.dumps(out, ensure_ascii=False))
+    except Exception as e:  # noqa: BLE001
+        print("코스닥 장중 값 실패:", e)
 
 
 if __name__ == "__main__":

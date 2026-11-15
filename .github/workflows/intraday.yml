@@ -50,12 +50,12 @@ jobs:
             rc=$?
             if [ $rc -eq 0 ]; then
               tmp=$(mktemp -d)
-              cp live.json "$tmp/"
+              cp live.json "$tmp/"; [ -f kosdaq_live.json ] && cp kosdaq_live.json "$tmp/"
               (
                 cd "$tmp" && git init -q && git checkout -q -b live-data &&
                 git config user.name "github-actions[bot]" &&
                 git config user.email "41898282+github-actions[bot]@users.noreply.github.com" &&
-                git add live.json && git commit -qm "live $(TZ=Asia/Seoul date '+%F %H:%M') KST" &&
+                git add -A && git commit -qm "live $(TZ=Asia/Seoul date '+%F %H:%M') KST" &&
                 git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" live-data
               ) && echo "올림: $(cat live.json | head -c 120)" || echo "::warning::live-data 푸시 실패"
               rm -rf "$tmp"
