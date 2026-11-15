@@ -510,23 +510,25 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     mas.forEach((d, k) => parts.push(`<path d="${pathOf(ind('ma:' + d), s, e, x, y)}" fill="none" stroke="${css('--ma' + (k + 1))}" stroke-width="1.3" stroke-opacity=".95"/>`));
     // price
     if (M.ohlc) {
-      const O = M.ohlc, bw = Math.max(1, Math.min(14, (PW / Math.max(1, cnt)) * .68));
-      const upC = css('--st-fall'), dnC = css('--accent');
+      // OHLC 바: 세로선 = 고가~저가, 왼쪽 눈금 = 시가, 오른쪽 눈금 = 종가. 오르면 빨강, 내리면 파랑
+      const O = M.ohlc, slot = PW / Math.max(1, cnt), tk = Math.max(0, Math.min(6, slot * .36));
+      const upC = css('--st-fall'), dnC = css('--accent'), sw = slot > 4 ? 1.4 : 1;
       for (let i = s; i < e; i++) {
         const o = O.o[i], c = O.c[i], hh = O.h[i], ll = O.l[i];
         if (c == null) continue;
-        const col = c >= o ? upC : dnC, xi = x(i).toFixed(1);
-        parts.push(`<line x1="${xi}" x2="${xi}" y1="${y(hh).toFixed(1)}" y2="${y(ll).toFixed(1)}" stroke="${col}" stroke-width="1"/>`);
-        if (bw >= 2) {
-          const yt = y(Math.max(o, c)), yb = y(Math.min(o, c));
-          parts.push(`<rect x="${(x(i) - bw / 2).toFixed(1)}" y="${yt.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1, yb - yt).toFixed(1)}" fill="${col}"/>`);
+        const col = c >= (o == null ? c : o) ? upC : dnC, xi = x(i);
+        let d = `M${xi.toFixed(1)} ${y(hh).toFixed(1)}V${y(ll).toFixed(1)}`;
+        if (tk >= 1) {
+          if (o != null) d += `M${(xi - tk).toFixed(1)} ${y(o).toFixed(1)}H${xi.toFixed(1)}`;
+          d += `M${xi.toFixed(1)} ${y(c).toFixed(1)}H${(xi + tk).toFixed(1)}`;
         }
+        parts.push(`<path d="${d}" stroke="${col}" stroke-width="${sw}" fill="none"/>`);
       }
     } else {
       parts.push(`<path d="${pathOf(M.price.vals, s, e, x, y)}" fill="none" stroke="${css('--price')}" stroke-width="1.7" stroke-linejoin="round"/>`);
     }
     const li = e - 1;
-    if (M.price.vals[li] != null) {
+    if (M.price.vals[li] != null && (!M.ohlc || (M.live && li === M.n - 1))) {
       const isLive = M.live && li === M.n - 1;
       parts.push(isLive
         ? `<circle cx="${x(li).toFixed(1)}" cy="${y(M.price.vals[li]).toFixed(1)}" r="4.5" fill="${css('--panel')}" stroke="${css('--st-bounce')}" stroke-width="2"/><text x="${(x(li) - 6).toFixed(1)}" y="${(y(M.price.vals[li]) - 9).toFixed(1)}" text-anchor="end" style="fill:${css('--st-bounce')};font-family:var(--f-body)">장중</text>`
@@ -797,6 +799,12 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     OHLC = rows.slice(1).map((r) => ({ d: parseDate(r[0]), o: +r[ix('open')], h: +r[ix('high')], l: +r[ix('low')], c: +r[ix('close')] })).filter((r) => r.d && r.c > 0);
     return OHLC;
   }
+  function attachDailyOhlc(B, rows) {
+    const m = new Map(rows.map((r) => [r.d.getTime(), r]));
+    const pick = (k) => B.dates.map((d, i) => { const r = m.get(d.getTime()); return r ? r[k] : B.price.vals[i]; });
+    B.ohlc = { o: pick('o'), h: pick('h'), l: pick('l'), c: B.price.vals.slice() };
+    B.cache = null;
+  }
   function buildWeekly(B, rows) {
     const byDay = new Map(B.dates.map((d, i) => [d.getTime(), i]));
     const wk = [];
@@ -864,6 +872,8 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       state: B.state ? { ...B.state, vals: push(B.state.vals, B.state.vals[last]) } : B.state,
       conds: B.conds.map((c) => ({ ...c, vals: push(c.vals, c.vals[last]) })),
       others: B.others.map((c) => ({ ...c, vals: push(c.vals, null) })),
+      ohlc: B.ohlc ? (() => { const v = L[LIVE_KEY], pc = B.ohlc.c[last];
+        return { o: push(B.ohlc.o, pc), h: push(B.ohlc.h, Math.max(pc, v)), l: push(B.ohlc.l, Math.min(pc, v)), c: push(B.ohlc.c, v) }; })() : null,
     };
   }
   async function loadLive() {
@@ -893,7 +903,8 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       M = M0 = buildModel(t); MD = M0;
       sourceDesc = '종가 데이터 · ' + `${M.n.toLocaleString('ko-KR')}거래일 · ${fmtD(M.dates[0])} ~ ${fmtD(M.dates[M.n - 1])}`;
       renderAll();
-      if (tf === 'week') await setTf('week');
+      try { attachDailyOhlc(M0, await loadOhlc()); MD = M0; if (M === M0) M = M0; } catch (_) {}
+      if (tf === 'week') await setTf('week'); else renderAll();
       loadLive(); setInterval(loadLive, 2 * 60 * 1000);
     } catch (_) { showErr('데이터를 불러오지 못했습니다. 잠시 뒤 새로고침해 주세요.'); }
   })();
