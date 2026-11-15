@@ -174,7 +174,8 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     </div>
     <div class="ctrls tools">
       <select id="overlay" hidden><option value="">없음</option></select>
-      <span class="ctl"><label for="maDays">이동평균(EMA)</label>
+      <span class="ctl"><label for="maType">이동평균</label>
+        <select id="maType" aria-label="이동평균 종류"><option value="EMA">EMA (지수)</option><option value="SMA">SMA (단순)</option><option value="HMA">HMA (헐)</option></select>
         <input id="maDays" type="text" inputmode="numeric" value="60" autocomplete="off" size="11" aria-describedby="maHelp"> <span id="maHelp">일 (쉼표로 최대 4개)</span></span>
       <span class="ctl"><label for="ind">기술적 지표</label>
         <select id="ind">
@@ -348,11 +349,29 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     }
     return o;
   }
-  function ind(key) {
+  // HMA(n) = WMA(2·WMA(n/2) − WMA(n), √n)
+  function wma(v, n) {
+    const o = new Array(v.length).fill(null), den = n * (n + 1) / 2;
+    for (let i = n - 1; i < v.length; i++) {
+      let s = 0, ok = true;
+      for (let k = 0; k < n; k++) { const x = v[i - k]; if (x == null) { ok = false; break; } s += x * (n - k); }
+      if (ok) o[i] = s / den;
+    }
+    return o;
+  }
+  function hma(v, n) {
+    const a = wma(v, Math.max(1, Math.floor(n / 2))), b = wma(v, n);
+    const d = a.map((x, i) => (x == null || b[i] == null ? null : 2 * x - b[i]));
+    return wma(d, Math.max(1, Math.floor(Math.sqrt(n))));
+  }
+  let maType = 'EMA';
+  try { const t = localStorage.getItem('ma-type'); if (['EMA', 'SMA', 'HMA'].includes(t)) maType = t; } catch (_) {}
+  function ind(key0) {
+    const key = key0.startsWith('ma:') ? maType + key0 : key0;
     M.cache = M.cache || {};
     if (M.cache[key]) return M.cache[key];
     const p = M.price.vals; let r;
-    if (key.startsWith('ma:')) r = ema(p, +key.slice(3));
+    if (key0.startsWith('ma:')) { const n = +key0.slice(3); r = maType === 'SMA' ? sma(p, n) : maType === 'HMA' ? hma(p, n) : ema(p, n); }
     else if (key === 'bb') {
       const m = sma(p, 20);
       const sd = m.map((mv, i) => { if (mv == null) return null; let s = 0; for (let j = i - 19; j <= i; j++) s += (p[j] - mv) ** 2; return Math.sqrt(s / 20); });
@@ -609,7 +628,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       const hit = [...seen].find((v) => st.re.test(v)); if (hit) add(css(st.v), hit + ' 구간', st.key === 'fall' ? .8 : .55);
     });
     if (nC) add(css('--on'), '조건 충족', 1);
-    mas.forEach((d, k) => add(css('--ma' + (k + 1)), d + (M.weekly ? '주' : '일') + ' EMA', 1, true));
+    mas.forEach((d, k) => add(css('--ma' + (k + 1)), d + (M.weekly ? '주' : '일') + ' ' + maType, 1, true));
     if (bb) add(css('--accent'), '볼린저 밴드 20일 ±2σ', .8, true);
     if (indKey === 'macd') { add(css('--accent'), 'MACD', 1, true); add(css('--ma1'), '시그널', 1, true); }
     if (ov) add(css('--accent'), ov.name + ' (오른쪽 축)', .9, true);
@@ -632,7 +651,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     cross.setAttribute('x1', xi); cross.setAttribute('x2', xi); cross.setAttribute('visibility', 'visible');
     let h = `<div class="d">${M.weekly ? fmtD(M.wstart[i]) + ' 주 ~ ' : ''}${fmtD(M.dates[i])}${M.live && i === M.n - 1 ? ' 장중 ' + M.live.time_kst.slice(11) + ' (잠정, 판정은 전일 기준)' : ''}</div><div class="p">${fmtN(M.price.vals[i])}</div>${M.ohlc ? `<div>시 ${fmtShort(M.ohlc.o[i])} · 고 ${fmtShort(M.ohlc.h[i])} · 저 ${fmtShort(M.ohlc.l[i])}</div>` : ''}`;
     if (M.state) { const st = stateOf(M.state.vals[i]); if (st) h += `<div style="color:${css(st.v)};font-weight:700">${esc(M.state.vals[i])}</div>`; }
-    G.mas.forEach((d, k) => { const v = ind('ma:' + d)[i]; h += `<div style="color:${css('--ma' + (k + 1))}">${d}${M.weekly ? '주' : '일'} EMA ${fmtShort(v)}</div>`; });
+    G.mas.forEach((d, k) => { const v = ind('ma:' + d)[i]; h += `<div style="color:${css('--ma' + (k + 1))}">${d}${M.weekly ? '주' : '일'} ${maType} ${fmtShort(v)}</div>`; });
     if (G.bb && G.bb.up[i] != null) h += `<div style="color:${css('--accent')}">볼린저 ${fmtShort(G.bb.lo[i])} ~ ${fmtShort(G.bb.up[i])}</div>`;
     if (G.subInfo) {
       const vals = G.subInfo.series.map(([arr]) => fmtShort(arr[i]));
@@ -778,6 +797,12 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
   $('ind').addEventListener('change', () => { if (M) renderChart(); });
   $('allStates').addEventListener('change', () => { if (M) renderChart(); });
   $('maDays').addEventListener('input', () => { if (M) schedule(); });
+  $('maType').value = maType;
+  $('maType').addEventListener('change', (e) => {
+    maType = e.target.value;
+    try { localStorage.setItem('ma-type', maType); } catch (_) {}
+    if (M) renderChart();
+  });
   let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => M && renderChart(), 120); });
   try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => M && renderAll()); } catch (_) {}
   new MutationObserver(() => M && renderAll()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
