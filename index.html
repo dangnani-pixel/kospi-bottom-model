@@ -171,6 +171,10 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     <div class="chart-head">
       <p class="label" style="margin:0">지수와 판정 구간</p>
       <div class="ctrls">
+        <div class="seg" id="tfSeg" role="group" aria-label="봉 단위">
+          <button type="button" data-tf="day" aria-pressed="true">일봉</button>
+          <button type="button" data-tf="week">주봉</button>
+        </div>
         <div class="seg" id="ranges">
           <button type="button" data-d="31">1개월</button>
           <button type="button" data-d="365" aria-pressed="true">1년</button>
@@ -311,6 +315,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
   function fmtN(v, dp = 2) { return v == null ? '–' : v.toLocaleString('ko-KR', { minimumFractionDigits: dp, maximumFractionDigits: dp }); }
 
   function renderStatus() {
+    const M = MD || window.__M;
     const n = M.n, i = n - 1;
     $('lastPrice').textContent = fmtN(M.price.vals[i]);
     const L = M.live;
@@ -453,7 +458,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     const x = (i) => L + ((i - s) / Math.max(1, cnt - 1)) * PW;
     const mas = maList();
     const bb = indKey === 'bb' ? ind('bb') : null;
-    const lines = [M.price.vals, ...mas.map((d) => ind('ma:' + d)), ...(bb ? [bb.up, bb.lo] : [])];
+    const lines = [M.price.vals, ...(M.ohlc ? [M.ohlc.h, M.ohlc.l] : []), ...mas.map((d) => ind('ma:' + d)), ...(bb ? [bb.up, bb.lo] : [])];
     let lo = Infinity, hi = -Infinity;
     for (const arr of lines) for (let i = s; i < e; i++) { const v = arr[i]; if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }
     if (!isFinite(lo)) { lo = 0; hi = 1; }
@@ -532,7 +537,22 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     // moving averages
     mas.forEach((d, k) => parts.push(`<path d="${pathOf(ind('ma:' + d), s, e, x, y)}" fill="none" stroke="${css('--ma' + (k + 1))}" stroke-width="1.3" stroke-opacity=".95"/>`));
     // price
-    parts.push(`<path d="${pathOf(M.price.vals, s, e, x, y)}" fill="none" stroke="${css('--price')}" stroke-width="1.7" stroke-linejoin="round"/>`);
+    if (M.ohlc) {
+      const O = M.ohlc, bw = Math.max(1, Math.min(14, (PW / Math.max(1, cnt)) * .68));
+      const upC = css('--st-fall'), dnC = css('--accent');
+      for (let i = s; i < e; i++) {
+        const o = O.o[i], c = O.c[i], hh = O.h[i], ll = O.l[i];
+        if (c == null) continue;
+        const col = c >= o ? upC : dnC, xi = x(i).toFixed(1);
+        parts.push(`<line x1="${xi}" x2="${xi}" y1="${y(hh).toFixed(1)}" y2="${y(ll).toFixed(1)}" stroke="${col}" stroke-width="1"/>`);
+        if (bw >= 2) {
+          const yt = y(Math.max(o, c)), yb = y(Math.min(o, c));
+          parts.push(`<rect x="${(x(i) - bw / 2).toFixed(1)}" y="${yt.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1, yb - yt).toFixed(1)}" fill="${col}"/>`);
+        }
+      }
+    } else {
+      parts.push(`<path d="${pathOf(M.price.vals, s, e, x, y)}" fill="none" stroke="${css('--price')}" stroke-width="1.7" stroke-linejoin="round"/>`);
+    }
     const li = e - 1;
     if (M.price.vals[li] != null) {
       const isLive = M.live && li === M.n - 1;
@@ -598,7 +618,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     host.classList.toggle('pannable', !!rangeDays);
 
     // range line under the buttons
-    $('rangeInfo').textContent = fmtD(M.dates[s]) + ' ~ ' + fmtD(M.dates[e - 1]) + ' · ' + cnt.toLocaleString('ko-KR') + '거래일';
+    $('rangeInfo').textContent = fmtD(M.dates[s]) + ' ~ ' + fmtD(M.dates[e - 1]) + ' · ' + cnt.toLocaleString('ko-KR') + (M.weekly ? '주' : '거래일');
     $('panHint').textContent = rangeDays ? '그래프를 좌우로 끌거나 ← → 키로 기간 이동' : '';
     $('latestBtn').hidden = endIdx == null || !rangeDays;
 
@@ -615,7 +635,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       const hit = [...seen].find((v) => st.re.test(v)); if (hit) add(css(st.v), hit + ' 구간', st.key === 'fall' ? .8 : .55);
     });
     if (nC) add(css('--on'), '조건 충족', 1);
-    mas.forEach((d, k) => add(css('--ma' + (k + 1)), d + '일 EMA', 1, true));
+    mas.forEach((d, k) => add(css('--ma' + (k + 1)), d + (M.weekly ? '주' : '일') + ' EMA', 1, true));
     if (bb) add(css('--accent'), '볼린저 밴드 20일 ±2σ', .8, true);
     if (indKey === 'macd') { add(css('--accent'), 'MACD', 1, true); add(css('--ma1'), '시그널', 1, true); }
     if (ov) add(css('--accent'), ov.name + ' (오른쪽 축)', .9, true);
@@ -636,9 +656,9 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     const i = Math.max(G.s, Math.min(G.e - 1, Math.round(G.s + ((px - G.L) / G.PW) * (G.cnt - 1))));
     const xi = G.x(i);
     cross.setAttribute('x1', xi); cross.setAttribute('x2', xi); cross.setAttribute('visibility', 'visible');
-    let h = `<div class="d">${fmtD(M.dates[i])}${M.live && i === M.n - 1 ? ' 장중 ' + M.live.time_kst.slice(11) + ' (잠정, 판정은 전일 기준)' : ''}</div><div class="p">${fmtN(M.price.vals[i])}</div>`;
+    let h = `<div class="d">${M.weekly ? fmtD(M.wstart[i]) + ' 주 ~ ' : ''}${fmtD(M.dates[i])}${M.live && i === M.n - 1 ? ' 장중 ' + M.live.time_kst.slice(11) + ' (잠정, 판정은 전일 기준)' : ''}</div><div class="p">${fmtN(M.price.vals[i])}</div>${M.ohlc ? `<div>시 ${fmtShort(M.ohlc.o[i])} · 고 ${fmtShort(M.ohlc.h[i])} · 저 ${fmtShort(M.ohlc.l[i])}</div>` : ''}`;
     if (M.state) { const st = stateOf(M.state.vals[i]); if (st) h += `<div style="color:${css(st.v)};font-weight:700">${esc(M.state.vals[i])}</div>`; }
-    G.mas.forEach((d, k) => { const v = ind('ma:' + d)[i]; h += `<div style="color:${css('--ma' + (k + 1))}">${d}일 EMA ${fmtShort(v)}</div>`; });
+    G.mas.forEach((d, k) => { const v = ind('ma:' + d)[i]; h += `<div style="color:${css('--ma' + (k + 1))}">${d}${M.weekly ? '주' : '일'} EMA ${fmtShort(v)}</div>`; });
     if (G.bb && G.bb.up[i] != null) h += `<div style="color:${css('--accent')}">볼린저 ${fmtShort(G.bb.lo[i])} ~ ${fmtShort(G.bb.up[i])}</div>`;
     if (G.subInfo) {
       const vals = G.subInfo.series.map(([arr]) => fmtShort(arr[i]));
@@ -747,6 +767,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
   }
 
   function renderPbr() {
+    const M = MD || window.__M;
     const box = $('pbrBox');
     let last = pbrRows[pbrRows.length - 1];
     if (!last && M) {   // fall back to a pbr column inside signals_daily.csv
@@ -791,13 +812,84 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
   // ---------- live (intraday, provisional): append today's value as the latest point ----------
   let M0 = null;
   const LIVE_URL = 'https://raw.githubusercontent.com/dangnani-pixel/kospi-bottom-model/live-data/live.json';
+  // ---------- 봉 단위(일봉/주봉) ----------
+  const MARKET = 'kospi', LIVE_KEY = 'kospi';
+  let tf = 'day', W0 = null, OHLC = null, LIVE = null, MD = null;
+  try { tf = localStorage.getItem('chart-tf') === 'week' ? 'week' : 'day'; } catch (_) {}
+  const wkey = (d) => { const t = new Date(d); const dow = (t.getUTCDay() + 6) % 7; t.setUTCDate(t.getUTCDate() - dow); return t.getTime(); };
+  async function loadOhlc() {
+    if (OHLC) return OHLC;
+    const r = await fetch(MARKET + '_ohlc.csv', { cache: 'no-store' });
+    if (!r.ok) throw new Error('주봉 자료(' + MARKET + '_ohlc.csv)를 불러오지 못했습니다.');
+    const rows = parseCSV(await r.text()); const head = rows[0];
+    const ix = (n) => head.indexOf(n);
+    OHLC = rows.slice(1).map((r) => ({ d: parseDate(r[0]), o: +r[ix('open')], h: +r[ix('high')], l: +r[ix('low')], c: +r[ix('close')] })).filter((r) => r.d && r.c > 0);
+    return OHLC;
+  }
+  function buildWeekly(B, rows) {
+    const byDay = new Map(B.dates.map((d, i) => [d.getTime(), i]));
+    const wk = [];
+    for (const r of rows) {
+      const k = wkey(r.d), last = wk[wk.length - 1];
+      if (last && last.k === k) { last.h = Math.max(last.h, r.h); last.l = Math.min(last.l, r.l); last.c = r.c; last.d = r.d; }
+      else wk.push({ k, s: r.d, d: r.d, o: r.o, h: r.h, l: r.l, c: r.c });
+    }
+    // 판정·체크 항목은 그 주 마지막 거래일 값(그날 판정이 없으면 그 주에서 가장 가까운 앞날)
+    const pickIdx = (w) => { for (let t = w.d.getTime(); t >= w.k; t -= 864e5) if (byDay.has(t)) return byDay.get(t); return null; };
+    const idx = wk.map(pickIdx);
+    const take = (arr) => idx.map((i) => (i == null ? null : arr[i]));
+    return {
+      weekly: true, n: wk.length, dates: wk.map((w) => w.d), wstart: wk.map((w) => w.s),
+      price: { ...B.price, vals: wk.map((w) => w.c) },
+      ohlc: { o: wk.map((w) => w.o), h: wk.map((w) => w.h), l: wk.map((w) => w.l), c: wk.map((w) => w.c) },
+      state: B.state ? { ...B.state, vals: take(B.state.vals) } : B.state,
+      conds: B.conds.map((c) => ({ ...c, vals: take(c.vals) })),
+      others: [],
+    };
+  }
+  function withLiveWeekly(B, L) {
+    const d = parseDate(L.time_kst), v = L[LIVE_KEY];
+    if (!d || v == null || !(d > B.dates[B.n - 1])) return B;
+    const n = B.n, last = n - 1, same = wkey(d) === wkey(B.dates[last]);
+    const cp = (a) => a.slice();
+    const O = { o: cp(B.ohlc.o), h: cp(B.ohlc.h), l: cp(B.ohlc.l), c: cp(B.ohlc.c) };
+    const out = { ...B, cache: null, live: L, dates: cp(B.dates), wstart: cp(B.wstart), price: { ...B.price, vals: cp(B.price.vals) }, ohlc: O,
+      state: B.state ? { ...B.state, vals: cp(B.state.vals) } : B.state, conds: B.conds.map((c) => ({ ...c, vals: cp(c.vals) })) };
+    if (same) {
+      O.h[last] = Math.max(O.h[last], v); O.l[last] = Math.min(O.l[last], v); O.c[last] = v; out.price.vals[last] = v; out.dates[last] = d;
+    } else {
+      out.n = n + 1; out.dates.push(d); out.wstart.push(d); out.price.vals.push(v);
+      O.o.push(B.ohlc.c[last]); O.h.push(Math.max(B.ohlc.c[last], v)); O.l.push(Math.min(B.ohlc.c[last], v)); O.c.push(v);
+      if (out.state) out.state.vals.push(B.state.vals[last]);
+      out.conds.forEach((c, k) => c.vals.push(B.conds[k].vals[last]));
+    }
+    return out;
+  }
+  function applyModel() {
+    MD = LIVE ? withLive(M0, LIVE) : M0;
+    if (tf === 'week' && W0) M = LIVE ? withLiveWeekly(W0, LIVE) : W0;
+    else M = MD;
+  }
+  async function setTf(next) {
+    tf = next;
+    try { localStorage.setItem('chart-tf', tf); } catch (_) {}
+    document.querySelectorAll('#tfSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.tf === tf));
+    $('maHelp').textContent = (tf === 'week' ? '주' : '일') + ' (쉼표로 최대 4개)';
+    if (tf === 'week' && !W0 && M0) {
+      try { W0 = buildWeekly(M0, await loadOhlc()); showErr(''); }
+      catch (e) { showErr(e.message); tf = 'day'; return setTf('day'); }
+    }
+    if (M0) { endIdx = null; applyModel(); renderAll(); }
+  }
+  $('tfSeg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setTf(b.dataset.tf); });
+
   function withLive(B, L) {
     const d = parseDate(L.time_kst);
     if (!L || !d || !(d > B.dates[B.n - 1])) return B;
     const last = B.n - 1, push = (arr, v) => [...arr, v];
     return {
       ...B, cache: null, n: B.n + 1, dates: push(B.dates, d), live: L,
-      price: { ...B.price, vals: push(B.price.vals, L.kospi) },
+      price: { ...B.price, vals: push(B.price.vals, L[LIVE_KEY]) },
       state: B.state ? { ...B.state, vals: push(B.state.vals, B.state.vals[last]) } : B.state,
       conds: B.conds.map((c) => ({ ...c, vals: push(c.vals, c.vals[last]) })),
       others: B.others.map((c) => ({ ...c, vals: push(c.vals, null) })),
@@ -814,9 +906,9 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
         if (j && j.time_kst && (!L || j.time_kst > L.time_kst)) L = j;
       } catch (_) {}
     }
-    const next = L && L.time_kst ? withLive(M0, L) : M0;
-    if (next === M && !M.live) return;
-    M = next;
+    if (!L || !L.time_kst) { if (!LIVE) return; L = null; }
+    LIVE = L;
+    applyModel();
     renderAll();
   }
 
@@ -827,11 +919,12 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       if (!r.ok) throw 0;
       const t = await r.text();
       if (!/^﻿?[^\n]*,/.test(t) || /<html/i.test(t.slice(0, 200))) throw 0;
-      M = M0 = buildModel(t);
+      M = M0 = buildModel(t); MD = M0;
       try { const r2 = await fetch('report.md', { cache: 'no-store' }); if (r2.ok) { const m = await r2.text(); if (!/<html/i.test(m.slice(0, 200))) reportMd = m; } } catch (_) {}
       try { const r3 = await fetch('pbr_history.csv', { cache: 'no-store' }); if (r3.ok) { const p = await r3.text(); if (!/<html/i.test(p.slice(0, 200))) setPbr(p); } } catch (_) {}
       sourceDesc = '종가 데이터 · ' + `${M.n.toLocaleString('ko-KR')}거래일 · ${fmtD(M.dates[0])} ~ ${fmtD(M.dates[M.n - 1])}`;
       renderAll();
+      if (tf === 'week') await setTf('week');
       loadLive(); setInterval(loadLive, 2 * 60 * 1000);
     } catch (_) { showErr('데이터를 불러오지 못했습니다. 잠시 뒤 새로고침해 주세요.'); }
   })();
