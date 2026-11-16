@@ -3,3 +3,4 @@ data/
 .venv/
 live.json
 kosdaq_live.json
+highs/

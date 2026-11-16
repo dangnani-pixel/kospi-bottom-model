@@ -7,7 +7,7 @@ on:
   workflow_dispatch:          # Actions 탭에서 수동 실행
   push:
     branches: [main]
-    paths: ["index.html", "kosdaq.html", "kosdaq.py", "ohlc.py", "kospi_bottom_model.py", "intraday.py", "backtest/**", ".github/workflows/update.yml"]
+    paths: ["index.html", "kosdaq.html", "kosdaq.py", "ohlc.py", "new_highs.py", "highs.html", "kospi_bottom_model.py", "intraday.py", "backtest/**", ".github/workflows/update.yml"]
 
 permissions:
   contents: write
@@ -51,6 +51,10 @@ jobs:
         continue-on-error: true
         run: python ohlc.py
 
+      - name: 52-week highs (site only, not committed)
+        continue-on-error: true
+        run: python new_highs.py
+
       - name: Commit new data
         if: steps.model.outcome == 'success'
         run: |
@@ -70,6 +74,7 @@ jobs:
           cp index.html signals_daily.csv report.md pbr_history.csv _site/
           cp kosdaq.html _site/; [ -f kosdaq_daily.csv ] && cp kosdaq_daily.csv _site/ || true
           cp kospi_ohlc.csv kosdaq_ohlc.csv _site/ 2>/dev/null || true
+          cp highs.html _site/; [ -d highs ] && cp -r highs _site/ || true
           cp backtest/*.pdf _site/backtest/
           # 장중에 이 워크플로가 돌면(코드 수정 push 등) 장중 잠정 값도 함께 배포해 실시간 패널이 사라지지 않게 한다
           python intraday.py && cp live.json _site/ || true
