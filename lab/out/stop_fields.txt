@@ -1,0 +1,3 @@
+4102	('{"code": "1", "text": "운영.Trading", "name": "TRADING"}', 'tradable', 'ok', '"OPEN"', False)	예: 삼성전자
+116	('{"code": "1", "text": "운영.Trading", "name": "TRADING"}', 'tradable', 'ok', '"OPEN"', True)	예: 메리츠 KIS CD금리투자 ETN
+109	('{"code": "2", "text": "정지.Halted", "name": "HALTED"}', 'halt', 'eventHalt01', '"OPEN"', True)	예: 금양
