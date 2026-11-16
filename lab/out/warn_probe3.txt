@@ -1,0 +1,8 @@
+[OK] https://finance.naver.com/sise/management.naver len=135926 itemCode=0 uniq=0 kinds=['투자경고', '투자위험', '투자주의']
+   ctx=[]
+[OK] https://finance.naver.com/sise/investment_alert.naver len=136472 itemCode=0 uniq=0 kinds=['투자경고', '투자위험', '투자주의']
+   ctx=[]
+[OK] https://finance.naver.com/sise/trading_halt.naver len=136448 itemCode=0 uniq=0 kinds=['투자경고', '투자위험', '투자주의']
+   ctx=[]
+[OK] https://finance.naver.com/sise/investment_alert.naver?type=caution len=136472 itemCode=0 uniq=0 kinds=['투자경고', '투자위험', '투자주의']
+   ctx=[]
