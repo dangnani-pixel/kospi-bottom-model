@@ -209,6 +209,8 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
           <button type="button" data-ind="rsi" aria-pressed="false">RSI</button>
           <button type="button" data-ind="macd" aria-pressed="false">MACD</button>
           <button type="button" data-ind="disp" aria-pressed="false">이격도</button>
+          <button type="button" data-ind="trend" aria-pressed="false" title="보이는 구간의 고점·저점을 이어 상승·하락 추세선을 자동으로 그림">추세선</button>
+          <button type="button" data-ind="sr" aria-pressed="false" title="보이는 구간에서 여러 번 반응한 가격대를 지지·저항선으로 표시">지지·저항</button>
         </span></span>
       <span class="ctl"><input id="allStates" type="checkbox"><label for="allStates" class="soft">다른 판정 구간도 표시</label></span>
     </div>
@@ -425,7 +427,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     const a = JSON.parse(localStorage.getItem('ma-list') || 'null');
     if (Array.isArray(a)) MAS = a.filter((m) => MA_TYPES.includes(m.type) && m.n >= 2 && m.n <= 500).slice(0, MA_MAX);
     const b = JSON.parse(localStorage.getItem('ind-list') || '[]');
-    if (Array.isArray(b)) INDS = new Set(b.filter((k) => ['bb', 'rsi', 'macd', 'disp'].includes(k)));
+    if (Array.isArray(b)) INDS = new Set(b.filter((k) => ['bb', 'rsi', 'macd', 'disp', 'trend', 'sr'].includes(k)));
   } catch (_) {}
   const saveUi = () => { try { localStorage.setItem('ma-list', JSON.stringify(MAS)); localStorage.setItem('ind-list', JSON.stringify([...INDS])); } catch (_) {} };
   const maKey = (m) => 'ma:' + m.type + ':' + m.n;
@@ -450,6 +452,62 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     }
     return (M.cache[key] = r);
   }
+  // ---------- 자동 추세선·지지·저항 (보이는 구간 [s, e)만 사용) ----------
+  // 스윙 고점·저점: 좌우 k개 봉보다 높은(낮은) 봉. 오른쪽 k개 봉이 지나야 확정되므로 마지막 k개 봉에서는 새로 생기지 않는다.
+  function autoLevels(s, e) {
+    const P = M.price.vals, O = M.ohlc;
+    const H = O ? O.h : P, Lw = O ? O.l : P, n = e - s;
+    if (n < 20) return null;
+    const k = Math.max(2, Math.min(10, Math.round(n / 40)));
+    const piv = { hi: [], lo: [] };
+    for (let i = s + k; i < e - k; i++) {
+      let isH = H[i] != null, isL = Lw[i] != null;
+      for (let j = i - k; j <= i + k && (isH || isL); j++) {
+        if (j === i) continue;
+        if (H[j] != null && H[j] > H[i]) isH = false;
+        if (Lw[j] != null && Lw[j] < Lw[i]) isL = false;
+      }
+      if (isH) piv.hi.push(i);
+      if (isL) piv.lo.push(i);
+    }
+    // 허용 오차: 보이는 구간 평균 봉 길이(고가-저가)의 0.5배, 최소 종가의 0.3%
+    let rng = 0, c = 0;
+    for (let i = s; i < e; i++) if (H[i] != null && Lw[i] != null) { rng += H[i] - Lw[i]; c++; }
+    const last = e - 1, close = P[last];
+    const tol = Math.max((c ? rng / c : 0) * .5, close * .003);
+    // 지지·저항: 스윙 고점·저점 가격을 tol 안에서 묶고, 2번 이상 반응한 가격대만
+    const pts = [...piv.hi.map((i) => H[i]), ...piv.lo.map((i) => Lw[i])].sort((a, b) => a - b);
+    const groups = [];
+    for (const v of pts) {
+      const g = groups[groups.length - 1];
+      if (g && v - g.sum / g.n <= tol) { g.sum += v; g.n++; } else groups.push({ sum: v, n: 1 });
+    }
+    const lv = groups.filter((g) => g.n >= 2).map((g) => ({ price: g.sum / g.n, touches: g.n }));
+    // 현재가에서 가까운 순으로 지지 2개·저항 2개 (멀리 떨어진 옛 가격대는 빼서 화면을 덜 복잡하게)
+    const sup = lv.filter((g) => g.price < close).sort((a, b) => b.price - a.price).slice(0, 2);
+    const res = lv.filter((g) => g.price >= close).sort((a, b) => a.price - b.price).slice(0, 2);
+    // 추세선: 최근 스윙 저점(고점) 두 개를 잇는 선 가운데, 그 뒤 종가가 선을 tol 넘게 깨지 않은 선(마지막 봉 제외).
+    // 점수 = 선에 닿은 스윙 수 + 최근성. 마지막 봉 종가가 선을 tol 넘게 벗어나면 이탈(지지)·돌파(저항)
+    function bestLine(idx, vals, up) {
+      const cand = idx.slice(-12); let best = null;
+      for (let a = 0; a < cand.length; a++) for (let b = a + 1; b < cand.length; b++) {
+        const i1 = cand[a], i2 = cand[b], v1 = vals[i1], v2 = vals[i2];
+        if (up ? !(v2 > v1) : !(v2 < v1)) continue;
+        const sl = (v2 - v1) / (i2 - i1), at = (i) => v1 + sl * (i - i1);
+        let ok = true;
+        for (let i = i1; i < last && ok; i++) if (P[i] != null && (up ? P[i] < at(i) - tol : P[i] > at(i) + tol)) ok = false;
+        if (!ok) continue;
+        const touches = cand.filter((i) => i >= i1 && Math.abs(vals[i] - at(i)) <= tol).length;
+        const score = touches + i2 / last * .5;
+        if (!best || score > best.score) best = { i1, sl, v1, at, touches, score };
+      }
+      if (!best || best.touches < 2) return null;
+      const lv = best.at(last), broke = up ? close < lv - tol : close > lv + tol;
+      return { ...best, lastVal: lv, broke };
+    }
+    return { piv, tol, sup, res, upLine: bestLine(piv.lo, Lw, true), dnLine: bestLine(piv.hi, H, false) };
+  }
+
   function maList() {
     return MAS.map((m, k) => ({ ...m, k })).filter((m) => Number.isFinite(m.n) && m.n >= 2 && m.n <= 500);
   }
@@ -601,6 +659,34 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
         : `<circle cx="${x(li).toFixed(1)}" cy="${y(M.price.vals[li]).toFixed(1)}" r="3.5" fill="${css('--price')}"/>`);
     }
 
+    // 자동 추세선·지지·저항
+    const AL = (INDS.has('trend') || INDS.has('sr')) ? autoLevels(s, e) : null;
+    if (AL) {
+      const cS = css('--st-check'), cR = css('--st-bounce'), inY = (v) => v >= lo && v <= hi, labs = [];
+      if (INDS.has('sr')) {
+        for (const [arr, col, nm] of [[AL.sup, cS, '지지'], [AL.res, cR, '저항']]) for (const g of arr) {
+          if (!inY(g.price)) continue;
+          const yy = y(g.price).toFixed(1);
+          parts.push(`<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="${col}" stroke-width="${g.touches >= 3 ? 1.6 : 1}" stroke-dasharray="6 4" stroke-opacity=".9"/>`);
+          labs.push({ x: W - R - 4, y: +yy - 4, a: 'end', col, w: 400, t: `${nm} ${fmtShort(g.price)} · ${g.touches}회` });
+        }
+      }
+      if (INDS.has('trend')) {
+        for (const [ln, col, nm, brk] of [[AL.upLine, cS, '상승 추세선', '이탈'], [AL.dnLine, cR, '하락 추세선', '돌파']]) {
+          if (!ln || !inY(ln.v1)) continue;
+          const xa = x(ln.i1), xb = x(e - 1), ya = y(ln.v1), yb = y(ln.lastVal);
+          parts.push(`<line x1="${xa.toFixed(1)}" y1="${ya.toFixed(1)}" x2="${xb.toFixed(1)}" y2="${yb.toFixed(1)}" stroke="${col}" stroke-width="1.8"/>`);
+          const nearRight = xa + 4 > W - R - 230;   // 선이 오른쪽 끝에서 시작하면 글자를 오른쪽 정렬로
+          labs.push({ x: nearRight ? W - R - 4 : xa + 4, y: (nearRight ? yb : ya) + (nm === '상승 추세선' ? 15 : -7), a: nearRight ? 'end' : 'start', col, w: 600, t: `${nm}${ln.broke ? ' ' + brk : ''} (${ln.touches}점 접촉)` });
+        }
+      }
+      for (const side of ['start', 'end']) {
+        const ls = labs.filter((l) => l.a === side).sort((a, b) => a.y - b.y);
+        for (let i = 1; i < ls.length; i++) if (ls[i].y - ls[i - 1].y < 13) ls[i].y = ls[i - 1].y + 13;
+      }
+      for (const l of labs) parts.push(`<text x="${l.x.toFixed(1)}" y="${Math.max(T + 11, Math.min(T + PH - 3, l.y)).toFixed(1)}" text-anchor="${l.a}" style="fill:${l.col};font-family:var(--f-body);font-weight:${l.w};paint-order:stroke;stroke:${css('--panel')};stroke-width:3px">${l.t}</text>`);
+    }
+
     // indicator sub-panels (stacked)
     const subInfos = [];
     subs.forEach((indKey, si) => {
@@ -677,6 +763,12 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     if (nC) add(css('--on'), '조건 충족', 1);
     mas.forEach((m) => add(css('--ma' + (m.k + 1)), m.n + (M.weekly ? '주' : '일') + ' ' + m.type, 1, true));
     if (bb) add(css('--accent'), '볼린저 밴드 20' + (M.weekly ? '주' : '일') + ' ±2σ', .8, true);
+    if (AL && INDS.has('trend')) {
+      if (AL.upLine) add(css('--st-check'), '상승 추세선' + (AL.upLine.broke ? '(이탈)' : ''), 1, true);
+      if (AL.dnLine) add(css('--st-bounce'), '하락 추세선' + (AL.dnLine.broke ? '(돌파)' : ''), 1, true);
+      if (!AL.upLine && !AL.dnLine) add(css('--muted'), '추세선 없음(조건 맞는 선 없음)', .6, true);
+    }
+    if (AL && INDS.has('sr')) { add(css('--st-check'), '지지선', .9, true); add(css('--st-bounce'), '저항선', .9, true); }
     if (subs.includes('macd')) { add(css('--accent'), 'MACD', 1, true); add(css('--ma1'), '시그널', 1, true); }
     if (ov) add(css('--accent'), ov.name + ' (오른쪽 축)', .9, true);
   }
