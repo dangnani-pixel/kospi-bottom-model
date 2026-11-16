@@ -7,7 +7,7 @@ on:
   workflow_dispatch:          # Actions 탭에서 수동 실행
   push:
     branches: [main]
-    paths: ["index.html", "kosdaq.html", "kosdaq.py", "ohlc.py", "new_highs.py", "highs.html", "kospi_bottom_model.py", "intraday.py", "backtest/**", ".github/workflows/update.yml"]
+    paths: ["index.html", "kosdaq.html", "kosdaq.py", "ohlc.py", "new_highs.py", "levels.py", "highs.html", "kospi_bottom_model.py", "intraday.py", "backtest/**", ".github/workflows/update.yml"]
 
 permissions:
   contents: write
@@ -34,6 +34,10 @@ jobs:
       - name: Install
         run: pip install "pandas<3" numpy "pykrx==1.2.9"
 
+      - name: Install trendln (추세선 라이브러리, 실패해도 나머지는 진행)
+        continue-on-error: true
+        run: pip install "trendln==0.1.18"
+
       - name: Run model
         id: model
         continue-on-error: true
@@ -50,6 +54,10 @@ jobs:
       - name: Daily OHLC for weekly candles
         continue-on-error: true
         run: python ohlc.py
+
+      - name: Trendlines and support/resistance (trendln, site only)
+        continue-on-error: true
+        run: python levels.py
 
       - name: 52-week highs (site only, not committed)
         continue-on-error: true
@@ -75,6 +83,7 @@ jobs:
           cp kosdaq.html _site/; [ -f kosdaq_daily.csv ] && cp kosdaq_daily.csv _site/ || true
           cp kospi_ohlc.csv kosdaq_ohlc.csv _site/ 2>/dev/null || true
           cp highs.html _site/; [ -d highs ] && cp -r highs _site/ || true
+          [ -d levels ] && cp -r levels _site/ || true
           cp backtest/*.pdf _site/backtest/
           # 장중에 이 워크플로가 돌면(코드 수정 push 등) 장중 잠정 값도 함께 배포해 실시간 패널이 사라지지 않게 한다
           python intraday.py && cp live.json _site/ || true

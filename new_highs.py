@@ -123,6 +123,11 @@ def main() -> int:
     if DIR.exists():
         shutil.rmtree(DIR)
     DIR.mkdir()
+    try:
+        import levels  # trendln 추세선·지지·저항 (없으면 건너뜀)
+    except Exception as e:  # noqa: BLE001
+        levels = None
+        print("::warning::trendln을 불러오지 못해 종목 추세선은 건너뜀:", e)
     items = []
     for u, df, prev_max in hits:
         c = df["close"]
@@ -132,6 +137,11 @@ def main() -> int:
                       "prev_high52": round(prev_max, 2), "mcap": u["mcap"],
                       "cash_like": u["type"] in ("etf", "etn") and bool(CASH_LIKE.search(u["name"]))})
         df[["open", "high", "low", "close"]].round(2).rename_axis("date").to_csv(DIR / f"{u['code']}.csv", date_format="%Y-%m-%d")
+        if levels is not None:
+            try:
+                (DIR / f"{u['code']}.levels.json").write_text(json.dumps(levels.for_frame(df[["open", "high", "low", "close"]])), encoding="utf-8")
+            except Exception as e:  # noqa: BLE001
+                print("  추세선 계산 실패", u["code"], e)
     items.sort(key=lambda r: -r["change_pct"])
     (DIR / "list.json").write_text(json.dumps({"date": f"{last_day:%Y-%m-%d}", "generated_kst": now.strftime("%Y-%m-%d %H:%M"),
                                                "universe": len(uni), "failed": len(fails), "excluded_halted": len(halted),
