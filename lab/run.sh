@@ -1,2 +1,3 @@
 set -e
-python lab/probe_admin.py
+mkdir -p lab/out
+python lab/new_highs.py | tee lab/out/highs_log3.txt
