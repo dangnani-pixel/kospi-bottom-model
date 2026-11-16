@@ -173,6 +173,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
         <button type="button" data-mk="KOSPI">코스피 주식</button>
         <button type="button" data-mk="KOSDAQ">코스닥 주식</button>
         <button type="button" data-mk="ETF">ETF·ETN</button>
+        <button type="button" data-mk="CASH">채권·머니마켓</button>
       </div>
     </div>
     <div class="stock-grid" id="stockGrid"><p class="empty">불러오는 중…</p></div>
@@ -989,10 +990,14 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
   // ---------- 신고가 목록과 종목 차트 ----------
   let REF = null, LIST = null, mk = 'all';
   const isEtf = (it) => it.type === 'ETF' || it.type === 'ETN';
+  const CASH_RX = /머니마켓|MMF|CD\d?|KOFR|SOFR|금리|채|통안|크레딧/;
+  const isCash = (it) => isEtf(it) && (it.cash_like ?? CASH_RX.test(it.name));
   function renderList() {
     const g = $('stockGrid'); g.innerHTML = '';
-    const items = LIST.items.filter((it) => mk === 'all' || (mk === 'ETF' ? isEtf(it) : it.market === mk && !isEtf(it)));
-    $('listTitle').textContent = `${LIST.date} 종가 기준 52주 신고가 · ${items.length}종목` + (mk === 'all' ? '' : ` (전체 ${LIST.items.length})`);
+    const items = LIST.items.filter((it) => mk === 'CASH' ? isCash(it) : !isCash(it) && (mk === 'all' || (mk === 'ETF' ? isEtf(it) : it.market === mk && !isEtf(it))));
+    const nCash = LIST.items.filter(isCash).length;
+    $('listTitle').textContent = `${LIST.date} 종가 기준 52주 신고가 · ${items.length}종목` +
+      (mk === 'CASH' ? ' (채권형·머니마켓·금리형 ETF·ETN)' : nCash ? ` (채권·머니마켓 ${nCash}종목은 별도 탭)` : '');
     if (!items.length) { g.innerHTML = '<p class="empty">해당 종목이 없습니다.</p>'; return; }
     for (const it of items) {
       const b = document.createElement('button'); b.type = 'button';
@@ -1038,7 +1043,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       LIST = await r.json();
       renderList();
       const want = (location.hash || '').slice(1);
-      const first = LIST.items.find((x) => x.code === want) || LIST.items[0];
+      const first = LIST.items.find((x) => x.code === want) || LIST.items.find((x) => !isCash(x)) || LIST.items[0];
       if (first) openStock(first);
       else $('source').textContent = `${LIST.date} 기준 52주 신고가 종목이 없습니다.`;
     } catch (_) { showErr('신고가 목록을 불러오지 못했습니다. 장 마감 뒤 갱신이 한 번 돌아야 생깁니다.'); }

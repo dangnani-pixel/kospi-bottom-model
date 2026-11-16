@@ -21,6 +21,8 @@ from kospi_bottom_model import OUT, http_get
 DIR = OUT / "highs"
 LOOKBACK = 250
 TYPE_LABEL = {"stock": "주식", "etf": "ETF", "etn": "ETN"}
+# 채권형·머니마켓·금리형 ETF/ETN: 이자가 쌓여 거의 매일 신고가가 되므로 사이트에서 따로 보여 준다
+CASH_LIKE = re.compile(r"머니마켓|MMF|CD\d?|KOFR|SOFR|금리|채|통안|크레딧")
 
 
 def universe() -> list[dict]:
@@ -92,7 +94,8 @@ def main() -> int:
         items.append({"code": u["code"], "name": u["name"], "market": u["market"],
                       "type": TYPE_LABEL.get(u["type"], u["type"] or "기타"),
                       "close": round(float(c.iloc[-1]), 2), "change_pct": round((c.iloc[-1] / c.iloc[-2] - 1) * 100, 2),
-                      "prev_high52": round(prev_max, 2), "mcap": u["mcap"]})
+                      "prev_high52": round(prev_max, 2), "mcap": u["mcap"],
+                      "cash_like": u["type"] in ("etf", "etn") and bool(CASH_LIKE.search(u["name"]))})
         df.round(2).rename_axis("date").to_csv(DIR / f"{u['code']}.csv", date_format="%Y-%m-%d")
     items.sort(key=lambda r: -r["change_pct"])
     (DIR / "list.json").write_text(json.dumps({"date": f"{last_day:%Y-%m-%d}", "generated_kst": now.strftime("%Y-%m-%d %H:%M"),
