@@ -1,2 +1,2 @@
 set -e
-python lab/probe_admin_match.py
+python lab/probe_warn.py
