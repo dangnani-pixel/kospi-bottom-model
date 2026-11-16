@@ -1,0 +1,12 @@
+005930 integration: []
+005930 basic: []
+051630 integration: []
+051630 basic: [('.marketAlertType.code', '02'), ('.marketAlertType.text', '투자경고')]
+010640 integration: []
+010640 basic: []
+[GET investwarn/investattentwarnisu.do] HTTP Error 404: Not Found
+[GET investwarn/investattention.do] HTTP Error 404: Not Found
+[GET investwarn/investwarnisu.do] HTTP Error 404: Not Found
+[GET investwarn/investattentionisu.do] HTTP Error 404: Not Found
+[GET investwarn/attentionisu.do] HTTP Error 404: Not Found
+[GET investwarn/adminissue.do] len=1472 title=['페이지 오류']
