@@ -1,0 +1,5 @@
+[FAIL] https://kind.krx.co.kr/main.do?method=loadInitPage&scrnmode=1 HTTP Error 403: Forbidden
+[FAIL] https://kind.krx.co.kr/main.do HTTP Error 403: Forbidden
+[FAIL] https://kind.krx.co.kr/common/js/kind_menu.js HTTP Error 403: Forbidden
+[FAIL] https://kind.krx.co.kr/js/menu.js HTTP Error 403: Forbidden
+investwarn links: []
