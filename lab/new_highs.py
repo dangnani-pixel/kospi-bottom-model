@@ -2,7 +2,7 @@
 
 그날 종가가 직전 250거래일(약 52주) 종가 중 최고 이상인 종목을 고른다.
 대상: 네이버 금융 시가총액 목록의 코스피·코스닥 전 종목(ETF·ETN·우선주·스팩 포함).
-상장 후 251거래일이 안 된 종목은 52주 기록이 없어 뺀다. 거래정지 종목(그날 거래량 0 또는 목록의 정지 표시)도 뺀다.
+상장 후 251거래일이 안 된 종목은 52주 기록이 없어 뺀다. 거래정지 종목(네이버 목록의 정지 표시)도 뺀다.
 결과: highs/list.json, highs/<종목코드>.csv(최근 약 2년 일봉 시가·고가·저가·종가). 저장소에는 커밋하지 않고 사이트에만 배포.
 """
 from __future__ import annotations
@@ -35,13 +35,9 @@ def universe() -> list[dict]:
             rows = j.get("stocks") or []
             if not rows:
                 break
-            if page == 1 and market == "KOSPI":
-                print("  목록 항목 필드:", sorted(rows[0].keys()))
             for s in rows:
-                # 목록에 거래정지 표시가 있으면 기록(필드 이름은 네이버 응답에 따라 다를 수 있어 넓게 찾음)
-                stop = any(re.search(r"stop|halt|suspend", k, re.I) and v not in (None, "", False, 0, "N", {}, [])
-                           and not (isinstance(v, dict) and str(v.get("code", "")).upper() in ("", "N", "0", "NORMAL"))
-                           for k, v in s.items())
+                # 거래정지: 네이버 목록의 tradeStopType.name == "HALTED" (tradableStatus == "halt")
+                stop = (s.get("tradeStopType") or {}).get("name") == "HALTED" or s.get("tradableStatus") == "halt"
                 out.append({"code": s["itemCode"], "name": s["stockName"], "market": market,
                             "type": s.get("stockEndType", ""), "mcap": s.get("marketValue", ""), "stop_flag": stop})
             page += 1
@@ -62,6 +58,7 @@ def daily(code: str, count: int = 520) -> pd.DataFrame:
 def main() -> int:
     t0 = time.time()
     uni = universe()
+    print(f"거래정지 {sum(u['stop_flag'] for u in uni)}종목")
     print(f"대상 {len(uni)}종목 ({pd.Series([u['type'] for u in uni]).value_counts().to_dict()})")
     now = pd.Timestamp.now(tz="Asia/Seoul")
     intraday = now.weekday() < 5 and (now.hour, now.minute) < (15, 40)
@@ -91,8 +88,8 @@ def main() -> int:
         c = df["close"]
         prev_max = c.iloc[-LOOKBACK - 1:-1].max()
         if c.iloc[-1] >= prev_max:
-            # 거래정지 제외: 그날 거래량이 0이거나(정지 중에는 거래가 없음) 목록에 정지 표시가 있으면 뺀다
-            if u.get("stop_flag") or not (df["volume"].iloc[-1] > 0):
+            # 거래정지 종목은 뺀다(거래량이 0인 것만으로는 빼지 않음: 거래가 드문 ETN 등)
+            if u.get("stop_flag"):
                 halted.append(u["name"])
                 continue
             hits.append((u, df, float(prev_max)))
