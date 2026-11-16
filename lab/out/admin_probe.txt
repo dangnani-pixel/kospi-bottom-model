@@ -1,0 +1,3 @@
+[OK] naver management page: n=0 sample=[] len=135563
+[OK] KIND adminissue: len=70471 titles=[]
+[OK] naver basic keys: ['chartIqEndUrl', 'closePrice', 'compareToPreviousClosePrice', 'compareToPreviousPrice', 'delayTime', 'delayTimeName', 'endUrl', 'fluctuationsRatio', 'imageChartUrlInfo', 'imageCharts', 'isWtsOrderable', 'itemCode', 'itemLogoPngUrl', 'itemLogoUrl', 'localTradedAt', 'marketSessionType', 'marketStatus', 'marketStatusDetailType', 'nationName', 'nationType', 'newPcUrl', 'newlyListed', 'overMarketPriceInfo', 'reutersCode', 'scriptChartTypes', 'sosok', 'stockEndType', 'stockExchangeName', 'stockExchangeType', 'stockName', 'tradableStatus', 'tradableStatusCode', 'tradableStatusUpdatedAt', 'tradeStopType']
