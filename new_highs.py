@@ -2,7 +2,7 @@
 
 그날 종가가 직전 250거래일(약 52주) 종가 중 최고 이상인 종목을 고른다.
 대상: 네이버 금융 시가총액 목록의 코스피·코스닥 전 종목(ETF·ETN·우선주·스팩 포함).
-상장 후 251거래일이 안 된 종목은 52주 기록이 없어 뺀다.
+상장 후 251거래일이 안 된 종목은 52주 기록이 없어 뺀다. 거래정지 종목(네이버 목록의 정지 표시)도 뺀다.
 결과: highs/list.json, highs/<종목코드>.csv(최근 약 2년 일봉 시가·고가·저가·종가). 저장소에는 커밋하지 않고 사이트에만 배포.
 """
 from __future__ import annotations
@@ -35,16 +35,18 @@ def universe() -> list[dict]:
             if not rows:
                 break
             for s in rows:
+                # 거래정지: 네이버 목록의 tradeStopType.name == "HALTED" (tradableStatus == "halt")
+                stop = (s.get("tradeStopType") or {}).get("name") == "HALTED" or s.get("tradableStatus") == "halt"
                 out.append({"code": s["itemCode"], "name": s["stockName"], "market": market,
-                            "type": s.get("stockEndType", ""), "mcap": s.get("marketValue", "")})
+                            "type": s.get("stockEndType", ""), "mcap": s.get("marketValue", ""), "stop_flag": stop})
             page += 1
     return out
 
 
 def daily(code: str, count: int = 520) -> pd.DataFrame:
     raw = http_get(f"https://fchart.stock.naver.com/sise.nhn?symbol={code}&timeframe=day&count={count}&requestType=0", tries=2)
-    rows = re.findall(r'data="(\d{8})\|([^|]*)\|([^|]*)\|([^|]*)\|([^|]*)\|', raw.decode("euc-kr", errors="ignore"))
-    df = pd.DataFrame(rows, columns=["date", "open", "high", "low", "close"])
+    rows = re.findall(r'data="(\d{8})\|([^|]*)\|([^|]*)\|([^|]*)\|([^|]*)\|([^"|]*)', raw.decode("euc-kr", errors="ignore"))
+    df = pd.DataFrame(rows, columns=["date", "open", "high", "low", "close", "volume"])
     if df.empty:
         return df
     df["date"] = pd.to_datetime(df["date"])
@@ -55,6 +57,7 @@ def daily(code: str, count: int = 520) -> pd.DataFrame:
 def main() -> int:
     t0 = time.time()
     uni = universe()
+    print(f"거래정지 {sum(u['stop_flag'] for u in uni)}종목")
     print(f"대상 {len(uni)}종목 ({pd.Series([u['type'] for u in uni]).value_counts().to_dict()})")
     now = pd.Timestamp.now(tz="Asia/Seoul")
     intraday = now.weekday() < 5 and (now.hour, now.minute) < (15, 40)
@@ -74,7 +77,7 @@ def main() -> int:
         raise RuntimeError("시세를 하나도 받지 못함")
     if intraday and last_day.date() == now.date():
         last_day = max(d for _, df, _ in res if df is not None and len(df) for d in df.index if d < last_day)
-    hits = []
+    hits, halted = [], []
     for u, df, err in res:
         if df is None or len(df) == 0:
             continue
@@ -84,6 +87,10 @@ def main() -> int:
         c = df["close"]
         prev_max = c.iloc[-LOOKBACK - 1:-1].max()
         if c.iloc[-1] >= prev_max:
+            # 거래정지 종목은 뺀다(거래량이 0인 것만으로는 빼지 않음: 거래가 드문 ETN 등)
+            if u.get("stop_flag"):
+                halted.append(u["name"])
+                continue
             hits.append((u, df, float(prev_max)))
     if DIR.exists():
         shutil.rmtree(DIR)
@@ -96,12 +103,13 @@ def main() -> int:
                       "close": round(float(c.iloc[-1]), 2), "change_pct": round((c.iloc[-1] / c.iloc[-2] - 1) * 100, 2),
                       "prev_high52": round(prev_max, 2), "mcap": u["mcap"],
                       "cash_like": u["type"] in ("etf", "etn") and bool(CASH_LIKE.search(u["name"]))})
-        df.round(2).rename_axis("date").to_csv(DIR / f"{u['code']}.csv", date_format="%Y-%m-%d")
+        df[["open", "high", "low", "close"]].round(2).rename_axis("date").to_csv(DIR / f"{u['code']}.csv", date_format="%Y-%m-%d")
     items.sort(key=lambda r: -r["change_pct"])
     (DIR / "list.json").write_text(json.dumps({"date": f"{last_day:%Y-%m-%d}", "generated_kst": now.strftime("%Y-%m-%d %H:%M"),
-                                               "universe": len(uni), "failed": len(fails), "items": items},
+                                               "universe": len(uni), "failed": len(fails), "excluded_halted": len(halted),
+                                               "items": items},
                                               ensure_ascii=False), encoding="utf-8")
-    print(f"{last_day:%Y-%m-%d} 52주 신고가(종가) {len(items)}종목, 실패 {len(fails)}, {time.time() - t0:.0f}초")
+    print(f"{last_day:%Y-%m-%d} 52주 신고가(종가) {len(items)}종목, 거래정지 제외 {len(halted)} {halted[:20]}, 실패 {len(fails)}, {time.time() - t0:.0f}초")
     return 0
 
 
