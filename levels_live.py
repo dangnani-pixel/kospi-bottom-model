@@ -35,7 +35,7 @@ def main() -> int:
             out["time_kst"] = now.strftime("%Y-%m-%d %H:%M")
             (OUT / f"levels_{name}.json").write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
             made += 1
-            print(name, "장중 추세선", {k: (len(v.get("lines", [])), len(v.get("levels", []))) for k, v in out.items() if isinstance(v, dict)})
+            print(name, "장중 추세선", {k: sorted(x for x in v if x not in ("from", "to")) for k, v in out.items() if isinstance(v, dict)})
         except Exception as e:  # noqa: BLE001
             print(name, "장중 추세선 실패:", e)
     return 0 if made else 3

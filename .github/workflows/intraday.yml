@@ -8,13 +8,17 @@
 name: Intraday update
 
 on:
+  # GitHub 예약 실행은 자주 빠지거나 늦어져서 시작 신호를 여러 번 건다.
+  # 이미 반복 실행이 돌고 있으면 뒤 신호는 대기열(최신 1개만 유지)에서 기다렸다가,
+  # 앞 실행이 끝났을 때 장중이면 이어서 돌고 장 마감 뒤면 바로 끝난다.
   schedule:
-    - cron: "50 23 * * 0-4"     # 08:50 KST (월~금) 시작
-    - cron: "20 0-6 * * 1-5"    # 09:20~15:20 KST 매시: 앞 실행이 빠졌거나 끊겼을 때 다시 시작
+    - cron: "33,41,49,57 23 * * 0-4"       # 08:33~08:57 KST
+    - cron: "7,17,27,37,47,57 0-6 * * 1-5"  # 09:07~15:57 KST, 10분 간격
   workflow_dispatch:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: intraday-update
@@ -34,9 +38,12 @@ jobs:
       - name: Install
         run: pip install "pandas<3" numpy
 
-      - name: Install trendln (장중 추세선, 실패해도 지수 갱신은 진행)
+      - name: Install trend tools (trendln·pytrendline·pricelevels, 실패해도 지수 갱신은 진행)
         continue-on-error: true
-        run: pip install "trendln==0.1.18"
+        run: |
+          pip install "trendln==0.1.18" "pytrendline==1.0.1" scikit-learn cython setuptools wheel
+          pip install --no-build-isolation "zigzag==0.1.3"
+          pip install --no-deps "pricelevels==0.0.4"
 
       - name: Loop until market close
         env:
@@ -73,3 +80,9 @@ jobs:
             fi
             sleep 300
           done
+          # 실행 시간 제한(약 6시간)으로 장 마감 전에 끝나면 다음 실행을 바로 시작
+          if [ "$(kst)" -lt 1540 ] && [ "$(TZ=Asia/Seoul date +%u)" -le 5 ]; then
+            echo "장 마감 전 종료 → 다음 반복 실행 시작"
+            curl -sS -X POST -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/intraday.yml/dispatches" -d '{"ref":"main"}' || true
+          fi

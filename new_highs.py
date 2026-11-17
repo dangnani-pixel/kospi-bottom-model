@@ -139,7 +139,7 @@ def main() -> int:
         df[["open", "high", "low", "close"]].round(2).rename_axis("date").to_csv(DIR / f"{u['code']}.csv", date_format="%Y-%m-%d")
         if levels is not None:
             try:
-                (DIR / f"{u['code']}.levels.json").write_text(json.dumps(levels.for_frame(df[["open", "high", "low", "close"]])), encoding="utf-8")
+                (DIR / f"{u['code']}.levels.json").write_text(json.dumps(levels.for_frame(df[["open", "high", "low", "close"]], heavy=False)), encoding="utf-8")
             except Exception as e:  # noqa: BLE001
                 print("  추세선 계산 실패", u["code"], e)
     items.sort(key=lambda r: -r["change_pct"])
