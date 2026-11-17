@@ -206,7 +206,8 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       <span class="ctl"><label for="lvTool">추세·가격대 도구</label>
         <select id="lvTool" title="깃허브·허깅페이스 오픈소스로 계산한 추세선·가격대">
           <option value="">없음</option>
-          <option value="trendln_lines">trendln 추세선</option>
+          <option value="trendln_sup">trendln 지지 추세선</option>
+          <option value="trendln_res">trendln 저항 추세선</option>
           <option value="trendln_levels">trendln 지지·저항</option>
           <option value="pytrendline">pytrendline 추세선</option>
           <option value="pricelevels">PriceLevels 가격대 (ZigZag 군집)</option>
@@ -461,8 +462,8 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
   }
   // ---------- 추세선·지지·저항: trendln(오픈소스) 계산 결과(levels json)를 그린다 ----------
   let LV = null, LV_D = null, LV_L = null, LV_KEY = null, TOOL = '', G_atr = null;
-  try { TOOL = localStorage.getItem('lv-tool') || ''; } catch (_) {}
-  const TOOL_NAME = { trendln_lines: 'trendln', trendln_levels: 'trendln', pytrendline: 'pytrendline', pricelevels: 'PriceLevels' };
+  try { TOOL = localStorage.getItem('lv-tool') || ''; if (TOOL === 'trendln_lines') TOOL = 'trendln_sup'; } catch (_) {}
+  const TOOL_NAME = { trendln_sup: 'trendln', trendln_res: 'trendln', trendln_levels: 'trendln', pytrendline: 'pytrendline', pricelevels: 'PriceLevels' };
   // 마감 기준(levels/kospi.json)과 장중 잠정(live-data 브랜치의 levels_kospi.json) 중 더 최근 것을 쓴다
   async function loadLevels() {
     const get = async (u) => { try { const r = await fetch(u + '?t=' + Date.now(), { cache: 'no-store' }); return r.ok ? await r.json() : null; } catch (_) { return null; } };
@@ -633,11 +634,11 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
 
     // 추세·가격대 도구 (오픈소스 계산 결과)
     // 장중 파일에 고른 도구 결과가 없으면 그 도구만 마감 기준 결과로 대신 그림
-    const LVtf = M.weekly ? 'week' : 'day', LVk = { trendln_lines: 'trendln', trendln_levels: 'trendln', pytrendline: 'pytrendline', pricelevels: 'pricelevels' }[TOOL];
+    const LVtf = M.weekly ? 'week' : 'day', LVk = { trendln_sup: 'trendln', trendln_res: 'trendln', trendln_levels: 'trendln', pytrendline: 'pytrendline', pricelevels: 'pricelevels' }[TOOL];
     const LVhas = (doc) => !!(doc && doc[LVtf] && doc[LVtf][LVk] && (doc[LVtf][LVk].lines || doc[LVtf][LVk].levels));
     const LVdoc = TOOL && TOOL !== 'atr' && LV ? (LVhas(LV) ? LV : [LV_D, LV_L].find(LVhas) || LV) : null;
     const LVt = LVdoc ? LVdoc[LVtf] : null;
-    const LVsrc = LVt ? (TOOL === 'trendln_lines' ? { lines: (LVt.trendln || {}).lines } : TOOL === 'trendln_levels' ? { levels: (LVt.trendln || {}).levels }
+    const LVsrc = LVt ? (TOOL === 'trendln_sup' || TOOL === 'trendln_res' ? { lines: ((LVt.trendln || {}).lines || []).filter((l) => l.kind === (TOOL === 'trendln_sup' ? 'sup' : 'res')) } : TOOL === 'trendln_levels' ? { levels: (LVt.trendln || {}).levels }
       : TOOL === 'pytrendline' ? { lines: (LVt.pytrendline || {}).lines } : TOOL === 'pricelevels' ? { levels: (LVt.pricelevels || {}).levels } : {}) : null;
     const LVmissing = LVt && !LVsrc.lines && !LVsrc.levels;
     let LVshown = { up: 0, dn: 0, sup: 0, res: 0 };
@@ -773,8 +774,8 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       if (!LVt) add(css('--muted'), '추세·가격대 자료 없음', .6, true);
       else if (LVmissing) add(css('--muted'), TOOL_NAME[TOOL] + ' 계산 결과 없음(라이브러리 실패 또는 해당 없음)', .6, true);
       else {
-        const isLines = TOOL === 'trendln_lines' || TOOL === 'pytrendline';
-        if (isLines) { if (LVshown.up) add(css('--st-check'), '지지 추세선', 1, true); if (LVshown.dn) add(css('--st-bounce'), '저항 추세선', 1, true); if (!LVshown.up && !LVshown.dn) add(css('--muted'), '이 구간에 추세선 없음', .6, true); }
+        const isLines = TOOL === 'trendln_sup' || TOOL === 'trendln_res' || TOOL === 'pytrendline';
+        if (isLines) { if (LVshown.up) add(css('--st-check'), '지지 추세선', 1, true); if (LVshown.dn) add(css('--st-bounce'), '저항 추세선', 1, true); if (!LVshown.up && !LVshown.dn) add(css('--muted'), TOOL === 'trendln_sup' ? '지지 추세선 없음(조건을 지킨 선 없음 또는 화면 밖)' : TOOL === 'trendln_res' ? '저항 추세선 없음(조건을 지킨 선 없음 또는 화면 밖)' : '이 구간에 추세선 없음', .6, true); }
         else { if (LVshown.sup) add(css('--st-check'), '지지선', .9, true); if (LVshown.res) add(css('--st-bounce'), '저항선', .9, true); if (!LVshown.sup && !LVshown.res) add(css('--muted'), '이 구간에 가격대 없음', .6, true); }
         add(css('--muted'), `${LVt.from} ~ ${LVt.to} ${M.weekly ? '주봉' : '일봉'} 기준, ${TOOL_NAME[TOOL]}` + (LVdoc.provisional ? ` · 장중 잠정 ${LVdoc.time_kst.slice(11)}` : ''), 0, true);
       }
