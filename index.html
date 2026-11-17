@@ -454,11 +454,14 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
   }
   // ---------- 추세선·지지·저항: trendln(오픈소스) 계산 결과(levels json)를 그린다 ----------
   let LV = null, LV_KEY = null;
+  // 마감 기준(levels/kospi.json)과 장중 잠정(live-data 브랜치의 levels_kospi.json) 중 더 최근 것을 쓴다
   async function loadLevels() {
-    const url = 'levels/kospi.json';
-    if (!url || url === LV_KEY) return;
-    LV_KEY = url; LV = null;
-    try { const r = await fetch(url, { cache: 'no-store' }); if (r.ok) LV = await r.json(); } catch (_) {}
+    const get = async (u) => { try { const r = await fetch(u + '?t=' + Date.now(), { cache: 'no-store' }); return r.ok ? await r.json() : null; } catch (_) { return null; } };
+    const [d, l] = await Promise.all([get('levels/kospi.json'), get('https://raw.githubusercontent.com/dangnani-pixel/kospi-bottom-model/live-data/levels_kospi.json')]);
+    const newer = (l && l.day && d && d.day && l.day.to > d.day.to) || (l && l.day && !d) ? l : d;
+    const key = newer ? (newer.time_kst || '') + (newer.day && newer.day.to) : null;
+    if (key === LV_KEY) return;
+    LV_KEY = key; LV = newer;
     if (M && (INDS.has('trend') || INDS.has('sr'))) renderChart();
   }
   function idxOfDate(ds) {
@@ -632,7 +635,8 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
         labs.push({ x: W - R - 4, y: +yy - 4, a: 'end', col, w: 400, t: `${g.kind === 'sup' ? '지지' : '저항'} ${fmtShort(g.price)} · ${g.touches}회` });
       }
       if (INDS.has('trend')) for (const ln of LVt.lines || []) {
-        const i1 = idxOfDate(ln.d1), i2 = idxOfDate(ln.d2);
+        // 장중 잠정 선의 끝(오늘)이 그래프에 아직 없으면 마지막 봉에 맞춘다
+        const i1 = idxOfDate(ln.d1), i2 = idxOfDate(ln.d2) ?? (parseDate(ln.d2) > M.dates[M.n - 1] ? M.n - 1 : null);
         if (i1 == null || i2 == null || i2 <= i1) continue;
         const sl = (ln.v2 - ln.v1) / (i2 - i1), iEnd = M.n - 1, vEnd = ln.v2 + sl * (iEnd - i2);
         const a0 = Math.max(i1, s), b0 = Math.min(iEnd, e - 1);
@@ -736,7 +740,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     if (INDS.has('trend') || INDS.has('sr')) {
       if (!LVt) add(css('--muted'), '추세선·지지·저항 자료 없음', .6, true);
       else {
-        const rng = `${LVt.from} ~ ${LVt.to} ${M.weekly ? '주봉' : '일봉'} 기준, trendln`;
+        const rng = `${LVt.from} ~ ${LVt.to} ${M.weekly ? '주봉' : '일봉'} 기준, trendln` + (LV.provisional ? ` · 장중 잠정 ${LV.time_kst.slice(11)}` : '');
         if (INDS.has('trend')) { if (LVshown.up) add(css('--st-check'), '지지 추세선', 1, true); if (LVshown.dn) add(css('--st-bounce'), '저항 추세선', 1, true); if (!LVshown.up && !LVshown.dn) add(css('--muted'), '이 구간에 추세선 없음', .6, true); }
         if (INDS.has('sr')) { if (LVshown.sup) add(css('--st-check'), '지지선', .9, true); if (LVshown.res) add(css('--st-bounce'), '저항선', .9, true); }
         add(css('--muted'), rng, .0, true);
@@ -1049,6 +1053,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     LIVE = L;
     applyModel();
     renderAll();
+    loadLevels();
   }
 
   renderMaRows(); renderChips();

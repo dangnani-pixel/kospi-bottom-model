@@ -631,7 +631,8 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
         labs.push({ x: W - R - 4, y: +yy - 4, a: 'end', col, w: 400, t: `${g.kind === 'sup' ? '지지' : '저항'} ${fmtShort(g.price)} · ${g.touches}회` });
       }
       if (INDS.has('trend')) for (const ln of LVt.lines || []) {
-        const i1 = idxOfDate(ln.d1), i2 = idxOfDate(ln.d2);
+        // 장중 잠정 선의 끝(오늘)이 그래프에 아직 없으면 마지막 봉에 맞춘다
+        const i1 = idxOfDate(ln.d1), i2 = idxOfDate(ln.d2) ?? (parseDate(ln.d2) > M.dates[M.n - 1] ? M.n - 1 : null);
         if (i1 == null || i2 == null || i2 <= i1) continue;
         const sl = (ln.v2 - ln.v1) / (i2 - i1), iEnd = M.n - 1, vEnd = ln.v2 + sl * (iEnd - i2);
         const a0 = Math.max(i1, s), b0 = Math.min(iEnd, e - 1);

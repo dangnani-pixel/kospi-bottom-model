@@ -34,6 +34,10 @@ jobs:
       - name: Install
         run: pip install "pandas<3" numpy
 
+      - name: Install trendln (장중 추세선, 실패해도 지수 갱신은 진행)
+        continue-on-error: true
+        run: pip install "trendln==0.1.18"
+
       - name: Loop until market close
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -49,8 +53,10 @@ jobs:
             python intraday.py
             rc=$?
             if [ $rc -eq 0 ]; then
+              python levels_live.py || echo "장중 추세선 건너뜀"
               tmp=$(mktemp -d)
               cp live.json "$tmp/"; [ -f kosdaq_live.json ] && cp kosdaq_live.json "$tmp/"
+              for f in levels_kospi.json levels_kosdaq.json; do [ -f "$f" ] && cp "$f" "$tmp/"; done
               (
                 cd "$tmp" && git init -q && git checkout -q -b live-data &&
                 git config user.name "github-actions[bot]" &&
