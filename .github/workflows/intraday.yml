@@ -1,10 +1,11 @@
-# 장중(평일 09:00~15:40 KST) 코스피 잠정 신호(live.json)를 약 5분 간격으로 계산해 live-data 브랜치에 올린다.
-# 사이트는 raw.githubusercontent.com의 live-data/live.json을 직접 읽는다(배포 없이 갱신).
+# 장중(평일 09:00~15:40 KST) 코스피 잠정 신호(live.json)와 장중 추세선을 약 5분 간격으로 계산해
+# live-data 브랜치에 올린다. 사이트는 raw.githubusercontent.com에서 직접 읽는다(배포 없이 갱신).
 #
-# GitHub 예약 실행은 짧은 간격(*/10)일수록 자주 빠지거나 늦어져서, 한 번 시작된 실행이
-# 장 마감까지 안에서 5분마다 반복하는 방식으로 바꿨다. 예약은 시작용으로 여러 번 걸어 두고,
-# 이미 돌고 있으면 뒤 예약은 대기열에서 기다렸다가 장 마감 뒤 바로 끝난다.
-# 한 실행은 GitHub 제한(6시간) 안에서 최대 5시간 50분만 돈다.
+# GitHub 예약 실행은 이 저장소에서 몇 시간씩 늦거나 빠지는 일이 잦아서 '이어 달리기'로 돈다.
+# - 시작: 장 마감 뒤 갱신(update.yml)이 끝날 때, 일요일 낮 예약, 평일 예약 신호, 수동 실행(Run workflow)
+# - 장 시작 전에 시작되면 08:50까지 기다리고, 장중이면 5분마다 계산, 15:40에 끝난다.
+# - 한 실행은 GitHub 제한(6시간) 안에서 5시간 50분까지만 돌고, 장이 끝나기 전이면 다음 실행을 스스로 시작한다.
+# - 다음 장 시작이 24시간 넘게 남았으면(금요일 저녁·토요일 등) 바로 끝난다.
 name: Intraday update
 
 on:
@@ -12,6 +13,7 @@ on:
   # 이미 반복 실행이 돌고 있으면 뒤 신호는 대기열(최신 1개만 유지)에서 기다렸다가,
   # 앞 실행이 끝났을 때 장중이면 이어서 돌고 장 마감 뒤면 바로 끝난다.
   schedule:
+    - cron: "17 3 * * 0"                    # 일요일 12:17 KST: 늦게 와도 월요일 장 전에 시작되도록
     - cron: "33,41,49,57 23 * * 0-4"       # 08:33~08:57 KST
     - cron: "7,17,27,37,47,57 0-6 * * 1-5"  # 09:07~15:57 KST, 10분 간격
   workflow_dispatch:
@@ -45,18 +47,33 @@ jobs:
           pip install --no-build-isolation "zigzag==0.1.3"
           pip install --no-deps "pricelevels==0.0.4"
 
-      - name: Loop until market close
+      - name: Wait for open and loop until market close
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set +e
           deadline=$(( $(date +%s) + 350 * 60 ))
           kst() { TZ=Asia/Seoul date +%H%M; }
-          dow=$(TZ=Asia/Seoul date +%u)
-          if [ "$dow" -ge 6 ]; then echo "주말"; exit 0; fi
-          while [ "$(date +%s)" -lt "$deadline" ]; do
-            now=$(kst)
-            if [ "$now" -ge 1540 ]; then echo "장 마감 시각 지남: $now"; break; fi
+          # 아직 끝나지 않은 가장 가까운 평일 장(08:50~15:40 KST)
+          open=; end=
+          for i in 0 1 2 3 4; do
+            day=$(TZ=Asia/Seoul date -d "+$i day" +%F)
+            [ "$(TZ=Asia/Seoul date -d "$day" +%u)" -ge 6 ] && continue
+            e=$(TZ=Asia/Seoul date -d "$day 15:40" +%s)
+            [ "$e" -le "$(date +%s)" ] && continue
+            open=$(TZ=Asia/Seoul date -d "$day 08:50" +%s); end=$e; break
+          done
+          if [ -z "$open" ] || [ $(( open - $(date +%s) )) -gt 86400 ]; then
+            echo "다음 장 시작이 24시간 넘게 남아 종료"; exit 0
+          fi
+          echo "대상 장: $(TZ=Asia/Seoul date -d "@$open" '+%F %H:%M') ~ $(TZ=Asia/Seoul date -d "@$end" '+%H:%M') KST"
+          finished=0
+          while [ "$(date +%s)" -lt "$end" ] && [ "$(date +%s)" -lt "$deadline" ]; do
+            now=$(date +%s)
+            if [ "$now" -lt "$open" ]; then
+              w=$(( open - now )); [ $w -gt 300 ] && w=300
+              sleep $w; continue
+            fi
             python intraday.py
             rc=$?
             if [ $rc -eq 0 ]; then
@@ -70,19 +87,19 @@ jobs:
                 git config user.email "41898282+github-actions[bot]@users.noreply.github.com" &&
                 git add -A && git commit -qm "live $(TZ=Asia/Seoul date '+%F %H:%M') KST" &&
                 git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" live-data
-              ) && echo "올림: $(cat live.json | head -c 120)" || echo "::warning::live-data 푸시 실패"
+              ) && echo "올림: $(head -c 120 live.json)" || echo "::warning::live-data 푸시 실패"
               rm -rf "$tmp"
             elif [ $rc -eq 3 ]; then
-              if [ "$now" -ge 0915 ]; then echo "09:15이 지나도 오늘 시세가 없어 휴장으로 보고 종료"; break; fi
+              if [ "$(kst)" -ge 0915 ]; then echo "09:15이 지나도 오늘 시세가 없어 휴장으로 보고 종료"; finished=1; break; fi
               echo "건너뜀(장 시작 전)"
             else
               echo "::warning::intraday.py 실패 (rc=$rc), 다음 회차에 다시 시도"
             fi
             sleep 300
           done
-          # 실행 시간 제한(약 6시간)으로 장 마감 전에 끝나면 다음 실행을 바로 시작
-          if [ "$(kst)" -lt 1540 ] && [ "$(TZ=Asia/Seoul date +%u)" -le 5 ]; then
-            echo "장 마감 전 종료 → 다음 반복 실행 시작"
+          # 실행 시간 제한(약 6시간)에 닿았는데 장이 아직 안 끝났으면 다음 실행을 시작
+          if [ $finished -eq 0 ] && [ "$(date +%s)" -lt "$end" ]; then
+            echo "장 마감 전 종료 → 다음 실행 시작"
             curl -sS -X POST -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/intraday.yml/dispatches" -d '{"ref":"main"}' || true
           fi
