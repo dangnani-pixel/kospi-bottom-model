@@ -119,6 +119,20 @@ input[type="text"] { font: .85rem var(--f-mono); padding: 4px 8px; border-radius
 .ctrls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: .85rem; color: var(--muted); }
 select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
 .chart { position: relative; width: 100%; touch-action: pan-y; }
+.tools-box > summary { cursor: pointer; font-size: .85rem; font-weight: 600; color: var(--ink); padding: 6px 0; list-style-position: inside; }
+.tools-box > summary .sum-note { font-weight: 400; color: var(--muted); font-size: .8rem; margin-left: 4px; }
+.tools-box[open] > summary { margin-bottom: 8px; }
+.zoom { display: inline-flex; gap: 4px; margin-left: auto; }
+.zoom .btn { min-width: 36px; padding: 3px 0; font: 600 .95rem var(--f-mono); }
+@media (min-width: 561px) { .tools-box > summary { display: none; } }
+@media (max-width: 560px) {
+  .panel { padding: 14px 12px; }
+  .chart { margin-inline: -8px; width: calc(100% + 16px); }
+  .chart text { font-size: 10.5px; }
+  .zoom .btn { min-width: 44px; min-height: 36px; }
+  .seg button { padding: 7px 10px; }
+  .tip { min-width: 150px; max-width: 68%; font-size: .76rem; }
+}
 .chart svg { display: block; max-width: 100%; }
 .chart text { font-family: var(--f-mono); font-size: 11px; fill: var(--muted); }
 .chart .cname { font-family: var(--f-body); font-size: 11.5px; fill: var(--ink); }
@@ -204,6 +218,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
         </div>
       </div>
     </div>
+    <details class="tools-box" id="toolsBox"><summary>차트 설정<span class="sum-note">보조선·이동평균·추세 도구·보조지표</span></summary>
     <div class="ctrls tools">
       <select id="overlay" hidden><option value="">없음</option></select>
       <span class="ctl ma-box"><span class="ctl-name">이동평균</span>
@@ -228,7 +243,8 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
         </span></span>
       <input id="allStates" type="checkbox" hidden>
     </div>
-    <div class="range-info"><span id="rangeInfo"></span><span class="hint" id="panHint"></span><button class="btn small" id="latestBtn" type="button" hidden>최근으로</button></div>
+    </details>
+    <div class="range-info"><span id="rangeInfo"></span><span class="hint" id="panHint"></span><button class="btn small" id="latestBtn" type="button" hidden>최근으로</button><span class="zoom"><button class="btn small" id="zoomOut" type="button" aria-label="축소(기간 넓게)">−</button><button class="btn small" id="zoomIn" type="button" aria-label="확대(기간 좁게)">+</button></span></div>
     <div class="chart" id="chart" tabindex="0" aria-label="지수 그래프. 기간을 고른 뒤 좌우로 끌거나 화살표 키로 이동"></div>
     <div class="legend" id="legend"></div>
   </section>
@@ -481,6 +497,20 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     if (want === endIdx) return;
     endIdx = want; schedule();
   }
+  const COARSE = matchMedia('(pointer: coarse)').matches;
+  function allDays() { return Math.max(1, (M.dates[M.n - 1] - M.dates[0]) / 864e5); }
+  function curDays() { return rangeDays || allDays(); }
+  function zoomTo(days, frac) {
+    if (!M || !G) return;
+    const [s, e] = viewRange(), cnt = e - s, a = s + frac * (cnt - 1);
+    const total = allDays(), nd = Math.max(14, Math.min(total, days));
+    rangeDays = nd >= total ? 0 : Math.round(nd);
+    $('ranges').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', +b.dataset.d === rangeDays));
+    if (!rangeDays) { endIdx = null; schedule(); return; }
+    const ncnt = Math.max(2, Math.round(cnt * nd / Math.max(1, (M.dates[e - 1] - M.dates[s]) / 864e5)));
+    const ne = Math.round(a + (1 - frac) * (ncnt - 1)) + 1;
+    endIdx = null; setEnd(ne); schedule();
+  }
   let raf = 0;
   function schedule() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; renderChart(); }); }
 
@@ -490,13 +520,14 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     const host = $('chart');
     const W = Math.max(300, host.clientWidth);
     const narrow = W < 560;
-    const L = narrow ? 84 : 104, R = overlay ? 52 : 14, T = 10;
-    const PH = narrow ? 230 : 300, rowH = 15, gap = 4;
+    const L = narrow ? 46 : 104, R = overlay ? 52 : 14, T = 10;
+    const PH = narrow ? Math.round(Math.min(380, Math.max(260, W * 0.85))) : 300, rowH = 15, gap = 4;
     const subs = ['rsi', 'macd', 'disp'].filter((k) => INDS.has(k));
     const SUBH = 86, SUBGAP = 34, subTop0 = T + PH + 44;
     const nC = M.conds.length;
     const stripTop = T + PH + 44 + subs.length * (SUBH + SUBGAP);
-    const H = stripTop + nC * (rowH + gap) + 6;
+    const SL = narrow ? 13 : 0; // 좁은 화면은 항목 이름을 막대 위에
+    const H = stripTop + nC * (rowH + gap + SL) + 6;
     const [s, e] = viewRange();
     const cnt = e - s, PW = W - L - R;
     const x = (i) => L + ((i - s) / Math.max(1, cnt - 1)) * PW;
@@ -721,8 +752,9 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
 
     // condition strips
     M.conds.forEach((c, k) => {
-      const yy = stripTop + k * (rowH + gap);
-      parts.push(`<text class="cname" x="${L - 8}" y="${yy + rowH - 3.5}" text-anchor="end">${esc(condLabel(c.name))}</text>`);
+      const yy = stripTop + SL + k * (rowH + gap + SL);
+      parts.push(SL ? `<text class="cname" x="${L}" y="${yy - 3}">${esc(condLabel(c.name))}</text>`
+        : `<text class="cname" x="${L - 8}" y="${yy + rowH - 3.5}" text-anchor="end">${esc(condLabel(c.name))}</text>`);
       parts.push(`<rect x="${L}" y="${yy}" width="${PW}" height="${rowH}" fill="${css('--off')}" rx="2"/>`);
       let i = s;
       while (i < e) {
@@ -743,7 +775,8 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
 
     // range line under the buttons
     $('rangeInfo').textContent = fmtD(M.dates[s]) + ' ~ ' + fmtD(M.dates[e - 1]) + ' · ' + cnt.toLocaleString('ko-KR') + (M.weekly ? '주' : '거래일');
-    $('panHint').textContent = rangeDays ? '그래프를 좌우로 끌거나 ← → 키로 기간 이동' : '';
+    $('panHint').textContent = COARSE ? '끌어서 이동 · 두 손가락으로 확대·축소 · 눌러서 값 보기'
+      : (rangeDays ? '좌우로 끌거나 ← → 키로 이동 · ' : '') + '−/+ 또는 Ctrl+휠로 확대·축소';
     $('latestBtn').hidden = endIdx == null || !rangeDays;
 
     // legend
@@ -801,7 +834,8 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       h += `<div style="color:${css('--accent')}">${si.title}: ${vals.join(' / ')}${si.hist ? ' (히스토그램 ' + fmtShort(si.hist[i]) + ')' : ''}</div>`;
     }
     if (G.ov) h += `<div style="color:${css('--accent')}">${esc(G.ov.name)}: ${fmtShort(G.ov.vals[i])}</div>`;
-    if (M.conds.length) h += '<div style="margin-top:4px">' + M.conds.map((c) => `${c.vals[i] === 1 ? '✓' : c.vals[i] === 0 ? '·' : '?'} ${esc(condLabel(c.name))}`).join('<br>') + '</div>';
+    // 좁은 화면은 체크 항목을 아래 막대로 보므로 값 상자에서는 뺀다
+    if (M.conds.length && G.W >= 560) h += '<div style="margin-top:4px">' + M.conds.map((c) => `${c.vals[i] === 1 ? '✓' : c.vals[i] === 0 ? '·' : '?'} ${esc(condLabel(c.name))}`).join('<br>') + '</div>';
     h += pbrTipLine(fmtD(M.dates[i]), i);
     tip.innerHTML = h; tip.hidden = false;
     const sx = xi * (r.width / G.W), tw = tip.offsetWidth;
@@ -833,7 +867,36 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     const end = () => { if (drag) { drag = null; host.classList.remove('dragging'); } };
     host.addEventListener('pointerup', end);
     host.addEventListener('pointercancel', end);
-    host.addEventListener('pointerleave', () => { if (!drag) hideTip(); });
+    host.addEventListener('pointerleave', (ev) => { if (!drag && ev.pointerType !== 'touch') hideTip(); });
+    // 두 손가락 확대·축소
+    const pts = new Map(); let pinch = null;
+    const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; };
+    host.addEventListener('pointerdown', (ev) => {
+      pts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      if (pts.size === 2 && M && G) {
+        ev.stopImmediatePropagation(); drag = null; host.classList.remove('dragging'); hideTip();
+        const r = host.getBoundingClientRect(), [a, b] = [...pts.values()];
+        const cx = ((a.x + b.x) / 2 - r.left) * (G.W / r.width);
+        pinch = { d0: dist(), days0: curDays(), frac: Math.min(1, Math.max(0, (cx - G.L) / G.PW)) };
+      }
+    }, true);
+    host.addEventListener('pointermove', (ev) => {
+      if (!pts.has(ev.pointerId)) return;
+      pts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      if (pinch && pts.size === 2) { ev.stopImmediatePropagation(); zoomTo(pinch.days0 * pinch.d0 / dist(), pinch.frac); }
+    }, true);
+    const lift = (ev) => { pts.delete(ev.pointerId); if (pts.size < 2) { if (pinch) drag = null; pinch = null; } };
+    host.addEventListener('pointerup', lift, true);
+    host.addEventListener('pointercancel', lift, true);
+    // 트랙패드 핀치·Ctrl+휠
+    host.addEventListener('wheel', (ev) => {
+      if (!ev.ctrlKey || !M || !G) return;
+      ev.preventDefault();
+      const r = host.getBoundingClientRect(), cx = (ev.clientX - r.left) * (G.W / r.width);
+      zoomTo(curDays() * Math.exp(ev.deltaY * 0.01), Math.min(1, Math.max(0, (cx - G.L) / G.PW)));
+    }, { passive: false });
+    // 그래프 밖을 누르면 값 상자 닫기(터치)
+    document.addEventListener('pointerdown', (ev) => { if (!host.contains(ev.target)) hideTip(); });
     host.addEventListener('keydown', (ev) => {
       if (!M || !G || !rangeDays) return;
       const stepN = Math.max(1, Math.round(G.cnt * .2));
@@ -968,7 +1031,12 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     MAS.push({ type: MAS.length ? MAS[MAS.length - 1].type : 'EMA', n: next }); saveUi(); renderMaRows(); M && renderChart();
   });
   $('allStates').addEventListener('change', () => { if (M) renderChart(); });
-  let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => M && renderChart(), 120); });
+  let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { openTools(); M && renderChart(); }, 120); });
+  // 넓은 화면은 차트 설정을 늘 펼쳐 둠(좁은 화면은 접어서 그래프가 먼저 보이게)
+  function openTools() { const b = $('toolsBox'); if (b && matchMedia('(min-width: 561px)').matches) b.open = true; }
+  openTools();
+  $('zoomIn').addEventListener('click', () => zoomTo(curDays() / 1.6, 1));
+  $('zoomOut').addEventListener('click', () => zoomTo(curDays() * 1.6, 1));
   try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => M && renderAll()); } catch (_) {}
   new MutationObserver(() => M && renderAll()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
