@@ -333,7 +333,7 @@ def build(df: pd.DataFrame, pbr: pd.Series | None = None) -> pd.DataFrame:
         if s >= 3:
             return "바닥 확인 중"
         if s == 2:
-            return "단기 반등 가능"
+            return "일부 개선(중립)"
         return "하락 진행"
 
     df["state"] = df.apply(judge, axis=1)
@@ -424,7 +424,7 @@ def write_report(df: pd.DataFrame, eps: list[dict], notes: dict, pbr: pd.DataFra
           f"체크 항목은 {len(COND_COLS)}개입니다. 자료가 없는 항목(예: 2003년 이전 외환, 2003년 이전 PBR)은 빼고 셉니다.", "",
           "- **회복**: 4개 이상 충족 + 6개월선 위",
           "- **바닥 확인 중**: 3개 이상 충족",
-          "- **단기 반등 가능**: 2개 충족",
+          "- **일부 개선(중립)**: 2개 충족. 이전 이름은 '단기 반등 가능'이었으나, 2003년 이후 고점 대비 10% 넘게 떨어진 구간에서 2개 충족 뒤 60거래일 상승 확률이 65%로 구간 평균(63%)과 비슷해 반등 신호로 보기 어려워 이름을 바꿈",
           "- **하락 진행**: 1개 이하", "",
           "아래 성적표의 '모델 신호'는 판정이 바닥 확인 중 또는 회복으로 바뀐 날입니다.", ""]
 
