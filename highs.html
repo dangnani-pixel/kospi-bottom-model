@@ -237,6 +237,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       <span class="ctl"><span class="ctl-name">보조지표</span>
         <span class="chips" id="indChips" role="group" aria-label="보조지표 (여러 개 선택 가능)">
           <button type="button" data-ind="bb" aria-pressed="false">볼린저</button>
+          <button type="button" data-ind="st" aria-pressed="false" title="Supertrend: ATR 10(와일더 평균) × 4배">슈퍼트렌드</button>
           <button type="button" data-ind="rsi" aria-pressed="false">RSI</button>
           <button type="button" data-ind="macd" aria-pressed="false">MACD</button>
           <button type="button" data-ind="disp" aria-pressed="false">이격도</button>
@@ -429,7 +430,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     const a = JSON.parse(localStorage.getItem('ma-list') || 'null');
     if (Array.isArray(a)) MAS = a.filter((m) => MA_TYPES.includes(m.type) && m.n >= 2 && m.n <= 500).slice(0, MA_MAX);
     const b = JSON.parse(localStorage.getItem('ind-list') || '[]');
-    if (Array.isArray(b)) INDS = new Set(b.filter((k) => ['bb', 'rsi', 'macd', 'disp'].includes(k)));
+    if (Array.isArray(b)) INDS = new Set(b.filter((k) => ['bb', 'st', 'rsi', 'macd', 'disp'].includes(k)));
   } catch (_) {}
   const saveUi = () => { try { localStorage.setItem('ma-list', JSON.stringify(MAS)); localStorage.setItem('ind-list', JSON.stringify([...INDS])); } catch (_) {} };
   const maKey = (m) => 'ma:' + m.type + ':' + m.n;
@@ -442,6 +443,30 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       const m = sma(p, 20);
       const sd = m.map((mv, i) => { if (mv == null) return null; let s = 0; for (let j = i - 19; j <= i; j++) s += (p[j] - mv) ** 2; return Math.sqrt(s / 20); });
       r = { mid: m, up: m.map((v, i) => (v == null ? null : v + 2 * sd[i])), lo: m.map((v, i) => (v == null ? null : v - 2 * sd[i])) };
+    } else if (key === 'st') {
+      // Supertrend (ATR 10, 4배): ATR은 TR의 와일더 평균(RMA), 밴드는 (고가+저가)/2 ∓ 4×ATR.
+      // 아래 밴드는 직전보다 내려가지 않고 위 밴드는 올라가지 않으며, 종가가 반대 밴드를 넘으면 추세가 바뀐다.
+      const O = M.ohlc, N = 10, F = 4, n = p.length;
+      const hi = (i) => (O ? O.h[i] : p[i]), lw = (i) => (O ? O.l[i] : p[i]);
+      const line = new Array(n).fill(null), dir = new Array(n).fill(null);
+      let atr = null, k = 0, sum = 0, fu = null, fl = null, d = 1, pc = null;
+      for (let i = 0; i < n; i++) {
+        const c = p[i]; if (c == null || hi(i) == null || lw(i) == null) continue;
+        const tr = pc == null ? hi(i) - lw(i) : Math.max(hi(i) - lw(i), Math.abs(hi(i) - pc), Math.abs(lw(i) - pc));
+        if (atr == null) { sum += tr; k++; if (k === N) atr = sum / N; }
+        else atr = (atr * (N - 1) + tr) / N;
+        if (atr != null) {
+          const mid = (hi(i) + lw(i)) / 2, bu = mid + F * atr, bl = mid - F * atr;
+          const nu = fu == null || bu < fu || pc > fu ? bu : fu;
+          const nl = fl == null || bl > fl || pc < fl ? bl : fl;
+          if (fu != null) { if (d === -1 && c > fu) d = 1; else if (d === 1 && c < fl) d = -1; }
+          else d = c >= nl ? 1 : -1;
+          fu = nu; fl = nl;
+          line[i] = d === 1 ? fl : fu; dir[i] = d;
+        }
+        pc = c;
+      }
+      r = { line, dir };
     } else if (key === 'rsi') r = rsi(p, 14);
     else if (key === 'macd') {
       const a = ema(p, 12), b = ema(p, 26);
@@ -533,7 +558,8 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     const x = (i) => L + ((i - s) / Math.max(1, cnt - 1)) * PW;
     const mas = maList();
     const bb = INDS.has('bb') ? ind('bb') : null;
-    const lines = [M.price.vals, ...(M.ohlc ? [M.ohlc.h, M.ohlc.l] : []), ...mas.map((m) => ind(maKey(m))), ...(bb ? [bb.up, bb.lo] : [])];
+    const st = INDS.has('st') ? ind('st') : null;
+    const lines = [M.price.vals, ...(M.ohlc ? [M.ohlc.h, M.ohlc.l] : []), ...mas.map((m) => ind(maKey(m))), ...(bb ? [bb.up, bb.lo] : []), ...(st ? [st.line] : [])];
     let lo = Infinity, hi = -Infinity;
     for (const arr of lines) for (let i = s; i < e; i++) { const v = arr[i]; if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }
     if (!isFinite(lo)) { lo = 0; hi = 1; }
@@ -622,6 +648,19 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       if (up) parts.push(`<path d="${up}${dn}Z" fill="${css('--accent')}" fill-opacity=".08" stroke="none"/>`);
       [bb.up, bb.lo].forEach((arr) => parts.push(`<path d="${pathOf(arr, s, e, x, y)}" fill="none" stroke="${css('--accent')}" stroke-width="1" stroke-opacity=".7"/>`));
       parts.push(`<path d="${pathOf(bb.mid, s, e, x, y)}" fill="none" stroke="${css('--accent')}" stroke-width="1" stroke-dasharray="3 3" stroke-opacity=".7"/>`);
+    }
+    // supertrend: 상승 추세(아래 지지선)와 하락 추세(위 저항선)를 색으로 나누고, 추세가 바뀌는 곳은 끊어 그림
+    if (st) {
+      const seg = { 1: '', '-1': '' };
+      let prev = null;
+      for (let i = s; i < e; i++) {
+        const v = st.line[i], dd = st.dir[i];
+        if (v == null) { prev = null; continue; }
+        seg[dd] += (prev === dd ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1);
+        prev = dd;
+      }
+      if (seg[1]) parts.push(`<path d="${seg[1]}" fill="none" stroke="${css('--st-check')}" stroke-width="1.8" stroke-linejoin="round"/>`);
+      if (seg[-1]) parts.push(`<path d="${seg[-1]}" fill="none" stroke="${css('--st-fall')}" stroke-width="1.8" stroke-linejoin="round"/>`);
     }
     // moving averages
     mas.forEach((m) => parts.push(`<path d="${pathOf(ind(maKey(m)), s, e, x, y)}" fill="none" stroke="${css('--ma' + (m.k + 1))}" stroke-width="1.3" stroke-opacity=".95"/>`));
@@ -770,7 +809,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     parts.push(`<line id="cross" x1="0" x2="0" y1="${T}" y2="${H - 6}" stroke="${css('--muted')}" stroke-width="1" visibility="hidden"/>`);
 
     host.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${esc(M.price.name)} 추이와 판정 구간">${parts.join('')}</svg><div class="tip" id="tip" hidden></div>`;
-    G = { W, L, R, PW, s, e, cnt, x, ov, mas, bb, subInfos };
+    G = { W, L, R, PW, s, e, cnt, x, ov, mas, bb, st, subInfos };
     host.classList.toggle('pannable', !!rangeDays);
 
     // range line under the buttons
@@ -794,6 +833,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     if (nC) add(css('--on'), '조건 충족', 1);
     mas.forEach((m) => add(css('--ma' + (m.k + 1)), m.n + (M.weekly ? '주' : '일') + ' ' + m.type, 1, true));
     if (bb) add(css('--accent'), '볼린저 밴드 20' + (M.weekly ? '주' : '일') + ' ±2σ', .8, true);
+    if (st) { add(css('--st-check'), '슈퍼트렌드 상승 추세 (ATR 10 × 4)', 1, true); add(css('--st-fall'), '슈퍼트렌드 하락 추세', 1, true); }
     if (atrShown) { add(css('--st-fall'), '매수 손절선 (종가−2×ATR14)', 1, true); add(css('--st-check'), '매도 손절선 (종가+2×ATR14)', 1, true); add(css('--muted'), 'ATR 손절선, 허깅페이스 Space31 식', 0, true); }
     if (TOOL && TOOL !== 'atr') {
       if (!LVt) add(css('--muted'), '추세·가격대 자료 없음', .6, true);
@@ -827,6 +867,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     let h = `<div class="d">${M.weekly ? fmtD(M.wstart[i]) + ' 주 ~ ' : ''}${fmtD(M.dates[i])}${M.live && i === M.n - 1 ? ' 장중 ' + M.live.time_kst.slice(11) + ' (잠정, 판정은 전일 기준)' : ''}</div><div class="p">${fmtN(M.price.vals[i])}</div>${M.ohlc ? `<div>시 ${fmtShort(M.ohlc.o[i])} · 고 ${fmtShort(M.ohlc.h[i])} · 저 ${fmtShort(M.ohlc.l[i])}</div>` : ''}`;
     if (M.state) { const st = stateOf(M.state.vals[i]); if (st) h += `<div style="color:${css(st.v)};font-weight:700">${esc(M.state.vals[i])}</div>`; }
     G.mas.forEach((m) => { const v = ind(maKey(m))[i]; h += `<div style="color:${css('--ma' + (m.k + 1))}">${m.n}${M.weekly ? '주' : '일'} ${m.type} ${fmtShort(v)}</div>`; });
+    if (G.st && G.st.line[i] != null) h += `<div style="color:${css(G.st.dir[i] === 1 ? '--st-check' : '--st-fall')}">슈퍼트렌드 ${fmtShort(G.st.line[i])} (${G.st.dir[i] === 1 ? '상승' : '하락'} 추세)</div>`;
     if (G.bb && G.bb.up[i] != null) h += `<div style="color:${css('--accent')}">볼린저 ${fmtShort(G.bb.lo[i])} ~ ${fmtShort(G.bb.up[i])}</div>`;
     if (G_atr && G_atr.buy[i] != null) h += `<div>ATR 손절 ${fmtShort(G_atr.buy[i])} / ${fmtShort(G_atr.sell[i])}</div>`;
     for (const si of G.subInfos) {
