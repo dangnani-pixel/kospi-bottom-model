@@ -359,8 +359,10 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
         const s = document.createElement('span'); s.className = 'state-chip';
         s.style.color = css(st.v); s.textContent = M.state.vals[i];
         chip.appendChild(s);
-        let k = i; while (k > 0 && M.state.vals[k - 1] === M.state.vals[i]) k--;
-        $('stateDur').textContent = fmtD(M.dates[k]) + '부터 ' + (i - k + 1) + '거래일째';
+        // 장중 행은 전일 판정을 복사해 둔 것이라 거래일 수에서 뺀다
+        const j = L && i > 0 ? i - 1 : i;
+        let k = j; while (k > 0 && M.state.vals[k - 1] === M.state.vals[j]) k--;
+        $('stateDur').textContent = fmtD(M.dates[k]) + '부터 ' + (j - k + 1) + '거래일째' + (j !== i ? ' (전일 종가 기준)' : '');
       }
     } else { chip.innerHTML = '<p class="empty">CSV에 판정(state) 열이 없습니다.</p>'; $('stateDur').textContent = ''; }
 

@@ -35,6 +35,8 @@ TIGHT_LAG = 63       # 2년물 금리를 몇 거래일 전과 비교할지 (약 
 PBR_WINDOW = 1250    # PBR 저평가 판단에 쓰는 과거 기간 (약 5년)
 PBR_MIN_DAYS = 250   # 이 기간보다 기록이 짧으면 PBR 항목은 '자료 없음'
 PBR_PCT = 0.2        # PBR이 과거 기간의 하위 20% 이하이면 '저평가'
+AVAIL_LAG = {"fred": 2, "fx_yahoo": 1, "fx_fred": 7}  # 관측일 뒤 며칠부터 쓸 수 있는지(달력일)
+MAX_AGE_DAYS = 10    # 마지막 관측이 이보다 오래되면 '자료 없음'
 DD_EPISODE = -0.20   # 252일 고점 대비 이 이상 하락하면 하락 구간
 EPISODE_FROM = "2002-01-01"
 
@@ -254,11 +256,29 @@ def load() -> tuple[pd.DataFrame, dict]:
 
     df = pd.DataFrame({"kospi": kospi})
     df = df[df.index >= START]
-    # 미국 지표는 한국 장 마감 뒤에 나오므로 하루 늦춰 붙인다(미리 보기 방지).
-    for name, s in [("usdkrw", krw), ("ust2y", dgs2), ("credit_spread", credit)]:
-        s = s.reindex(df.index.union(s.index)).ffill()
-        df[name] = s.reindex(df.index).shift(0 if name == "usdkrw" and "Yahoo" in notes["fx"] else 1)
+    # 실제로 쓸 수 있게 된 날짜 기준으로 붙인다(미리 보기 방지). 한국 장 마감(15:30 KST) 시점 기준:
+    # - FRED 일별 지표(DGS2, BAA10Y, 하이일드): 미국 D일 값은 미국 D+1일 오후 공개 = 한국 D+2일 새벽 → D+2일부터
+    # - Yahoo 환율 일봉: D일 봉은 한국 D+1일 아침에 마감 → D+1일부터
+    # - FRED 환율(DEXKOUS): 주 1회 공개 → 7일 뒤부터
+    fx_lag = AVAIL_LAG["fx_yahoo"] if "Yahoo" in notes["fx"] else AVAIL_LAG["fx_fred"]
+    for name, s, lag in [("usdkrw", krw, fx_lag), ("ust2y", dgs2, AVAIL_LAG["fred"]), ("credit_spread", credit, AVAIL_LAG["fred"])]:
+        df[name] = align_available(s, df.index, lag)
     return df, notes
+
+
+def align_available(s: pd.Series, idx: pd.DatetimeIndex, lag_days: int, max_age: int = MAX_AGE_DAYS) -> pd.Series:
+    """관측일 + lag_days 일부터 쓸 수 있는 값으로 붙이고, 관측일이 max_age 일보다 오래되면 비운다."""
+    s = s.dropna().sort_index()
+    avail = s.index + pd.Timedelta(days=lag_days)
+    val = pd.Series(s.to_numpy(), index=avail)
+    obs = pd.Series(s.index, index=avail)
+    val, obs = val[~val.index.duplicated(keep="last")], obs[~obs.index.duplicated(keep="last")]
+    u = idx.union(val.index)
+    v = val.reindex(u).ffill().reindex(idx)
+    o = obs.reindex(u).ffill().reindex(idx)
+    age = (pd.Series(idx, index=idx) - o).dt.days
+    v[age.isna() | (age > max_age)] = np.nan
+    return v
 
 
 COND_COLS = ["credit_ok", "fx_ok", "tightening_ok", "ma6m_ok", "vol_ok", "pbr_ok"]
@@ -289,8 +309,13 @@ def build(df: pd.DataFrame, pbr: pd.Series | None = None) -> pd.DataFrame:
     df["pbr_cut"] = pb_cut
 
     for c in raw:
-        valid = {"credit_ok": cs, "fx_ok": fx, "tightening_ok": df["ust2y"].shift(TIGHT_LAG),
-                 "ma6m_ok": df["ma6m"], "vol_ok": vol.rolling(60).max(), "pbr_ok": pb_cut}[c].notna()
+        # 비교에 쓰는 값이 모두 있어야 유효(하나라도 없으면 '자료 없음', 미충족으로 세지 않음)
+        valid = {"credit_ok": cs.notna() & cs.rolling(60).max().notna(),
+                 "fx_ok": fx.notna() & fx.rolling(20).mean().notna(),
+                 "tightening_ok": df["ust2y"].notna() & df["ust2y"].shift(TIGHT_LAG).notna(),
+                 "ma6m_ok": px.notna() & df["ma6m"].notna(),
+                 "vol_ok": vol.notna() & vol.rolling(60).max().notna(),
+                 "pbr_ok": pb.notna() & pb_cut.notna()}[c]
         s = persist(raw[c]).astype("float64")
         s[~valid] = np.nan
         df[c] = s
@@ -446,7 +471,7 @@ def write_report(df: pd.DataFrame, eps: list[dict], notes: dict, pbr: pd.DataFra
           f"- 외환: {notes['fx']}. 자료가 없는 초기 기간은 외환 항목을 빼고 계산",
           "- 긴축: 미국 2년물 국채금리(FRED DGS2)",
           "- 변동성: VKOSPI 대신 코스피 20일 실현변동성(연율화)",
-          "- 미국 지표는 한국 장 마감 후 발표되므로 하루 늦춰 반영",
+          "- 각 지표는 한국 장 마감(15:30) 시점에 실제로 공개돼 있던 값만 사용: FRED 일별 지표는 관측일 2일 뒤, Yahoo 환율은 1일 뒤(FRED 환율로 대체 시 7일 뒤)부터. 마지막 관측이 10일보다 오래되면 해당 항목은 '자료 없음'",
           "- PBR: KRX 정보데이터시스템 공식 코스피 PBR(로그인 필요, KRX_ID/KRX_PW 설정 시). 그날 KRX 값이 아직 없으면 "
           "네이버 증권 종목별 시가총액·PBR로 계산한 추정치(시가총액 합 ÷ 순자산 합, 보통주만)를 쓰고, 다음 실행 때 공식 값으로 바뀜", "",
           "## 한계", "",
