@@ -1,0 +1,29 @@
+/home/runner/work/kospi-bottom-model/kospi-bottom-model/lab/new/kospi_bottom_model.py:272: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`). Please use a specific unit instead.
+  avail = s.index + pd.Timedelta(days=lag_days)
+/home/runner/work/kospi-bottom-model/kospi-bottom-model/lab/new/kospi_bottom_model.py:272: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`). Please use a specific unit instead.
+  avail = s.index + pd.Timedelta(days=lag_days)
+/home/runner/work/kospi-bottom-model/kospi-bottom-model/lab/new/kospi_bottom_model.py:272: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`). Please use a specific unit instead.
+  avail = s.index + pd.Timedelta(days=lag_days)
+/home/runner/work/kospi-bottom-model/kospi-bottom-model/lab/new/kospi_bottom_model.py:176: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`). Please use a specific unit instead.
+  start = (krx_dates.max() - pd.Timedelta(days=10)) if len(krx_dates) else pd.Timestamp(START)
+/home/runner/work/kospi-bottom-model/kospi-bottom-model/lab/new/kospi_bottom_model.py:180: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`). Please use a specific unit instead.
+  b = min(a + pd.Timedelta(days=364), end)
+/home/runner/work/kospi-bottom-model/kospi-bottom-model/lab/new/kospi_bottom_model.py:184: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`). Please use a specific unit instead.
+  a = b + pd.Timedelta(days=1)
+코스피 지수 (Yahoo ^KS11 + 네이버 금융)
+원/달러 환율 (Yahoo KRW=X)
+미국 2년물 금리 (FRED DGS2)
+미국 하이일드 스프레드 (FRED BAMLH0A0HYM2)
+  하이일드 이력이 2023-11-20부터라 짧음 → Baa 스프레드(FRED BAA10Y)로 대체
+코스피 PBR
+KRX 로그인 시도...
+  로그인 ID: dangnani
+KRX 로그인 완료.
+  로그인 시간: 2026-11-20 08:07:26
+  만료 시간: 2026-11-20 09:07:26
+  KRX 공식 PBR 9일치 (2026-11-09 ~ 2026-11-19)
+  네이버 추정 PBR 1.187 (보통주 821종목, 시총 99.8%)
+
+완료: 6499행, 마지막 2026-11-20 · 판정 단기 반등 가능 · 하락 구간 6개
+→ /home/runner/work/kospi-bottom-model/kospi-bottom-model/lab/new/signals_daily.csv
+→ /home/runner/work/kospi-bottom-model/kospi-bottom-model/lab/new/report.md
