@@ -169,6 +169,8 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     <div class="loader">
       <a class="btn primary" href="index.html">← 코스피 바닥 신호판</a>
       <a class="btn" href="highs.html">52주 신고가 종목</a>
+      <button class="btn" id="reloadBtn" type="button" title="이미 갱신된 데이터를 다시 읽습니다">데이터 다시 불러오기</button>
+      <a class="btn" href="https://github.com/dangnani-pixel/kospi-bottom-model/actions/workflows/update.yml" target="_blank" rel="noopener" title="GitHub에 로그인한 뒤 Run workflow → Run workflow를 누르면 약 10~15분 뒤 사이트에 반영됩니다">수동 업데이트 (GitHub)</a>
     </div>
   </header>
   <div class="source" id="source"></div>
@@ -1052,6 +1054,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     MAS.push({ type: MAS.length ? MAS[MAS.length - 1].type : 'EMA', n: next }); saveUi(); renderMaRows(); M && renderChart();
   });
   $('allStates').addEventListener('change', () => { if (M) renderChart(); });
+  $('reloadBtn').addEventListener('click', () => location.reload());
   let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { openTools(); M && renderChart(); }, 120); });
   // 넓은 화면은 차트 설정을 늘 펼쳐 둠(좁은 화면은 접어서 그래프가 먼저 보이게)
   function openTools() { const b = $('toolsBox'); if (b && matchMedia('(min-width: 561px)').matches) b.open = true; }
@@ -1071,7 +1074,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
   const wkey = (d) => { const t = new Date(d); const dow = (t.getUTCDay() + 6) % 7; t.setUTCDate(t.getUTCDate() - dow); return t.getTime(); };
   async function loadOhlc() {
     if (OHLC) return OHLC;
-    const r = await fetch(MARKET + '_ohlc.csv', { cache: 'no-store' });
+    const r = await fetch(MARKET + '_ohlc.csv?t=' + Date.now(), { cache: 'no-store' });
     if (!r.ok) throw new Error('주봉 자료(' + MARKET + '_ohlc.csv)를 불러오지 못했습니다.');
     const rows = parseCSV(await r.text()); const head = rows[0];
     const ix = (n) => head.indexOf(n);
@@ -1178,7 +1181,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
   // ---------- boot: try sibling files (works under python -m http.server), else sample ----------
   (async () => {
     try {
-      const r = await fetch('kosdaq_daily.csv', { cache: 'no-store' });
+      const r = await fetch('kosdaq_daily.csv?t=' + Date.now(), { cache: 'no-store' });
       if (!r.ok) throw 0;
       const t = await r.text();
       if (!/^﻿?[^\n]*,/.test(t) || /<html/i.test(t.slice(0, 200))) throw 0;
