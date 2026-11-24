@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+      url: ${{ steps.deploy.outputs.page_url || steps.deploy_retry.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -97,7 +97,17 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
+      # 업로드 직후 배포 단계가 업로드한 파일을 못 찾는 일이 있어(GitHub 목록 반영 지연) 잠깐 기다리고, 실패하면 한 번 더 시도
+      - name: Wait for artifact to be listed
+        run: sleep 20
       - id: deploy
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+      - name: Retry wait
+        if: steps.deploy.outcome == 'failure'
+        run: sleep 60
+      - id: deploy_retry
+        if: steps.deploy.outcome == 'failure'
         uses: actions/deploy-pages@v4
 
       # GitHub 예약 실행이 자주 빠져서, 이 실행이 끝날 때 장중 실행을 시작시킨다.
