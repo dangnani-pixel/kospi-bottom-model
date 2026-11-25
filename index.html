@@ -236,6 +236,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
           <button type="button" data-ind="rsi" aria-pressed="false">RSI</button>
           <button type="button" data-ind="macd" aria-pressed="false">MACD</button>
           <button type="button" data-ind="disp" aria-pressed="false">이격도</button>
+          <button type="button" data-ind="exp" aria-pressed="false" title="관세청 월별 수출액 ÷ 조업일수(평일 1, 토요일 0.5, 일요일·공휴일 0)">일평균 수출</button>
         </span></span>
       <span class="ctl"><input id="allStates" type="checkbox"><label for="allStates" class="soft">다른 판정 구간도 표시</label></span>
     </div>
@@ -455,7 +456,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     const a = JSON.parse(localStorage.getItem('ma-list') || 'null');
     if (Array.isArray(a)) MAS = a.filter((m) => MA_TYPES.includes(m.type) && m.n >= 2 && m.n <= 500).slice(0, MA_MAX);
     const b = JSON.parse(localStorage.getItem('ind-list') || '[]');
-    if (Array.isArray(b)) INDS = new Set(b.filter((k) => ['bb', 'st', 'rsi', 'macd', 'disp'].includes(k)));
+    if (Array.isArray(b)) INDS = new Set(b.filter((k) => ['bb', 'st', 'rsi', 'macd', 'disp', 'exp'].includes(k)));
   } catch (_) {}
   const saveUi = () => { try { localStorage.setItem('ma-list', JSON.stringify(MAS)); localStorage.setItem('ind-list', JSON.stringify([...INDS])); } catch (_) {} };
   const maKey = (m) => 'ma:' + m.type + ':' + m.n;
@@ -498,6 +499,13 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       const mc = a.map((v, i) => (v == null || b[i] == null ? null : v - b[i]));
       const sg = ema(mc, 9);
       r = { macd: mc, sig: sg, hist: mc.map((v, i) => (v == null || sg[i] == null ? null : v - sg[i])) };
+    } else if (key === 'exp') {
+      // 관세청 월별 일평균 수출액(억 달러)을 그 달의 봉에 같은 값으로 붙인다. 자료는 다음 달 중순쯤 확정된다.
+      const mk = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      const v = M.dates.map((d) => { const o = EXP.get(mk(d)); return o ? o.avg / 1e8 : null; });
+      const yoy = M.dates.map((d) => { const o = EXP.get(mk(d)); return o && o.yoy != null ? o.yoy : null; });
+      const mon = M.dates.map((d) => (EXP.has(mk(d)) ? mk(d) : null));
+      r = { v, yoy, mon };
     } else if (key === 'disp') {
       const m = sma(p, 20);
       r = p.map((v, i) => (v == null || m[i] == null ? null : (v / m[i]) * 100));
@@ -575,7 +583,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     const narrow = W < 560;
     const L = narrow ? 46 : 104, R = overlay ? 52 : 14, T = 10;
     const PH = narrow ? Math.round(Math.min(380, Math.max(260, W * 0.85))) : 300, rowH = 15, gap = 4;
-    const subs = ['rsi', 'macd', 'disp'].filter((k) => INDS.has(k));
+    const subs = ['rsi', 'macd', 'disp', 'exp'].filter((k) => INDS.has(k) && (k !== 'exp' || EXP.size));
     const SUBH = 86, SUBGAP = 34, subTop0 = T + PH + 44;
     const nC = M.conds.length;
     const stripTop = T + PH + 44 + subs.length * (SUBH + SUBGAP);
@@ -770,9 +778,10 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     const subInfos = [];
     subs.forEach((indKey, si) => {
       const top = subTop0 + si * (SUBH + SUBGAP);
-      let series = [], ylo, yhi, refs, title, hist = null;
+      let series = [], ylo, yhi, refs, title, hist = null, note = null;
       if (indKey === 'rsi') { series = [[ind('rsi'), '--accent']]; ylo = 0; yhi = 100; refs = [30, 70]; title = 'RSI 14'; }
       else if (indKey === 'disp') { series = [[ind('disp'), '--accent']]; refs = [100]; title = '이격도 20'; }
+      else if (indKey === 'exp') { const x0 = ind('exp'); series = [[x0.v, '--ma3']]; { let a = Infinity, b = -Infinity; for (let i = s; i < e; i++) { const v = x0.v[i]; if (v != null) { a = Math.min(a, v); b = Math.max(b, v); } } refs = isFinite(a) ? [...new Set([Math.floor(a), Math.ceil(b)])] : []; } title = '일평균 수출 (억 달러, 관세청 월별)'; note = (i) => (x0.mon[i] ? `${x0.mon[i]}, 전년 동월 대비 ${x0.yoy[i] == null ? '–' : (x0.yoy[i] >= 0 ? '+' : '') + x0.yoy[i].toFixed(1) + '%'}` : '자료 없음'); }
       else { const m = ind('macd'); series = [[m.macd, '--accent'], [m.sig, '--ma1']]; hist = m.hist; refs = [0]; title = 'MACD 12·26·9'; }
       if (ylo == null) {
         ylo = Infinity; yhi = -Infinity;
@@ -797,7 +806,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       }
       series.forEach(([arr, tok]) => parts.push(`<path d="${pathOf(arr, s, e, x, ys)}" fill="none" stroke="${css(tok)}" stroke-width="1.3"/>`));
       parts.push(`<text class="cname" x="${L}" y="${top - 6}">${title}</text>`);
-      subInfos.push({ title, series, hist });
+      subInfos.push({ title, series, hist, note });
     });
 
     // condition strips
@@ -883,7 +892,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     if (G_atr && G_atr.buy[i] != null) h += `<div>ATR 손절 ${fmtShort(G_atr.buy[i])} / ${fmtShort(G_atr.sell[i])}</div>`;
     for (const si of G.subInfos) {
       const vals = si.series.map(([arr]) => fmtShort(arr[i]));
-      h += `<div style="color:${css('--accent')}">${si.title}: ${vals.join(' / ')}${si.hist ? ' (히스토그램 ' + fmtShort(si.hist[i]) + ')' : ''}</div>`;
+      h += `<div style="color:${css('--accent')}">${si.title}: ${vals.join(' / ')}${si.hist ? ' (히스토그램 ' + fmtShort(si.hist[i]) + ')' : ''}${si.note ? ' · ' + esc(si.note(i)) : ''}</div>`;
     }
     if (G.ov) h += `<div style="color:${css('--accent')}">${esc(G.ov.name)}: ${fmtShort(G.ov.vals[i])}</div>`;
     // 좁은 화면은 체크 항목을 아래 막대로 보므로 값 상자에서는 뺀다
@@ -997,6 +1006,17 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
     renderStatus(); renderPbr(); renderOverlayOptions(); renderChart(); renderReport();
   }
 
+  // ---------- 일평균 수출 (exports_monthly.csv: month,exp_usd,workdays,daily_avg_usd,daily_avg_yoy_pct) ----------
+  const EXP = new Map();
+  function setExports(text) {
+    const rows = text.trim().split(/\r?\n/); const hd = rows.shift().split(',');
+    const ci = (n) => hd.indexOf(n), im = ci('month'), ia = ci('daily_avg_usd'), iy = ci('daily_avg_yoy_pct');
+    if (im < 0 || ia < 0) return;
+    for (const line of rows) {
+      const c = line.split(','), avg = parseFloat(c[ia]), yoy = iy >= 0 && c[iy] !== '' ? parseFloat(c[iy]) : null;
+      if (/^\d{4}-\d{2}$/.test(c[im]) && isFinite(avg)) EXP.set(c[im], { avg, yoy: isFinite(yoy) ? yoy : null });
+    }
+  }
   // ---------- PBR (pbr_history.csv: date,pbr,coverage,n_stocks,time_kst,intraday) ----------
   let pbrRows = [];
   function setPbr(text) {
@@ -1218,6 +1238,7 @@ select { font: .85rem var(--f-body); padding: 4px 8px; border-radius: 6px; borde
       M = M0 = buildModel(t); MD = M0;
       loadLevels();
       try { const r2 = await fetch('report.md?t=' + Date.now(), { cache: 'no-store' }); if (r2.ok) { const m = await r2.text(); if (!/<html/i.test(m.slice(0, 200))) reportMd = m; } } catch (_) {}
+      try { const r4 = await fetch('exports_monthly.csv?t=' + Date.now(), { cache: 'no-store' }); if (r4.ok) { const t4 = await r4.text(); if (!/<html/i.test(t4.slice(0, 200))) setExports(t4); } } catch (_) {}
       try { const r3 = await fetch('pbr_history.csv?t=' + Date.now(), { cache: 'no-store' }); if (r3.ok) { const p = await r3.text(); if (!/<html/i.test(p.slice(0, 200))) setPbr(p); } } catch (_) {}
       sourceDesc = '종가 데이터 · ' + `${M.n.toLocaleString('ko-KR')}거래일 · ${fmtD(M.dates[0])} ~ ${fmtD(M.dates[M.n - 1])}`;
       renderAll();

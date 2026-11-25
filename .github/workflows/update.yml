@@ -7,7 +7,7 @@ on:
   workflow_dispatch:          # Actions 탭에서 수동 실행
   push:
     branches: [main]
-    paths: ["index.html", "kosdaq.html", "kosdaq.py", "ohlc.py", "new_highs.py", "levels.py", "highs.html", "kospi_bottom_model.py", "intraday.py", "backtest/**", ".github/workflows/update.yml"]
+    paths: ["index.html", "kosdaq.html", "kosdaq.py", "ohlc.py", "new_highs.py", "levels.py", "highs.html", "kospi_bottom_model.py", "intraday.py", "exports.py", "backtest/**", ".github/workflows/update.yml"]
 
 permissions:
   contents: write
@@ -33,7 +33,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install
-        run: pip install "pandas<3" numpy "pykrx==1.2.9"
+        run: pip install "pandas<3" numpy "pykrx==1.2.9" holidays
 
       - name: Install trend tools (trendln·pytrendline·pricelevels, 실패해도 나머지는 진행)
         continue-on-error: true
@@ -55,6 +55,12 @@ jobs:
         continue-on-error: true
         run: python kosdaq.py
 
+      - name: Korea exports, daily average (관세청 수출입총괄)
+        continue-on-error: true
+        env:
+          DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
+        run: python exports.py
+
       - name: Daily OHLC for weekly candles
         continue-on-error: true
         run: python ohlc.py
@@ -70,12 +76,13 @@ jobs:
       - name: Commit new data
         if: steps.model.outcome == 'success'
         run: |
-          if git diff --quiet -- signals_daily.csv pbr_history.csv kosdaq_daily.csv kospi_ohlc.csv kosdaq_ohlc.csv && [ -z "$(git ls-files --others --exclude-standard kosdaq_daily.csv kospi_ohlc.csv kosdaq_ohlc.csv)" ]; then
+          if git diff --quiet -- signals_daily.csv pbr_history.csv kosdaq_daily.csv kospi_ohlc.csv kosdaq_ohlc.csv exports_monthly.csv && [ -z "$(git ls-files --others --exclude-standard kosdaq_daily.csv kospi_ohlc.csv kosdaq_ohlc.csv exports_monthly.csv)" ]; then
             echo "No new trading day; nothing to commit."
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add signals_daily.csv report.md kospi_history.csv pbr_history.csv kosdaq_daily.csv kospi_ohlc.csv kosdaq_ohlc.csv
+            [ -f exports_monthly.csv ] && git add exports_monthly.csv
             git commit -m "Update signals $(date -u +%Y-%m-%d)"
             git push
           fi
@@ -86,6 +93,7 @@ jobs:
           cp index.html signals_daily.csv report.md pbr_history.csv _site/
           cp kosdaq.html _site/; [ -f kosdaq_daily.csv ] && cp kosdaq_daily.csv _site/ || true
           cp kospi_ohlc.csv kosdaq_ohlc.csv _site/ 2>/dev/null || true
+          [ -f exports_monthly.csv ] && cp exports_monthly.csv _site/ || true
           cp highs.html _site/; [ -d highs ] && cp -r highs _site/ || true
           [ -d levels ] && cp -r levels _site/ || true
           cp backtest/*.pdf _site/backtest/
