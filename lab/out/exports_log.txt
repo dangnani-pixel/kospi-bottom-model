@@ -1,0 +1,2 @@
+  2025 재시도: <urlopen error _ssl.c:994: The handshake operation timed out>
+수출 322개월 (2000-01 ~ 2026-10), 마지막 일평균 52.5억 달러, 조업일수 22.0
