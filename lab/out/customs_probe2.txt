@@ -1,0 +1,39 @@
+page 200 len=193689
+get* tokens: ["getCategoryClass", "getCookie", "getElementById", "getMypageUrl", "getNewtradeList", "getOrCreateQuickSummary", "getSsoApiUrl", "getTemplate"]
+Newtrade paths: []
+swagger refs: ["/css/common/swagger-ui.css", "/images/biz/swagger-guide/gw/1.jpg", "/images/biz/swagger-guide/gw/2.jpg", "/images/biz/swagger-guide/gw/3.jpg", "/images/biz/swagger-guide/gw/4.jpg", "/images/biz/swagger-guide/gw/5.jpg", "/images/biz/swagger-guide/gw/6.jpg", "/images/biz/swagger-guide/gw/7.jpg", "/images/biz/swagger-guide/gw/8.jpg", "/images/biz/swagger-guide/gw/gateway_swagger_guide.pdf"]
+[strtYymm] ...ewtradeList","consumes":["application/json"],"produces":["application/xml"]},"parameters":[{"name":"serviceKey","description":"공공데이터포털에서 받은 인증키","type":"string","required":true,"in":"query"},{"name":"strtYymm","description":"시작년월","type":"string","required":true,"in":"query"},{"name":"endYymm","description":"종료년월","type":"string","required":true,"in":"query"}]}},"definitions":{"header":{"type":"object","properties":{"resultMsg":{"type":"string","description":"결과메시지"},"resultCode":{"type":"string","description":"결과코드"}}},"body":{"type":"object","properties":{"items":{"$ref":"#/definitions/items"}}},"items":{"type":"object","properties":{"item":{"$ref":"#/definitions/item"}}}," item":{"type":"object","properties":{"balPayments":{"type":"number","description":"무역수지(달러)"},"expCnt":{"type":"number","description":"수출건수"},"expDlr":{"type":"number","description":"수출미화금액(달러)"},"impCnt":{"type":"number","description":"수입건수"},"impDlr":{"type":"number","description":"수입미화금액(달러)"},"year":{"type":"string","description":"기간"}}},"item":{"type":"object","properties":{"balPayments":{"type":"number","description":"무역수지(달러)"},"expCnt":{"type":"number","description":"수출건수"},"expDlr":{"type":"number","description":"수출금액(달러)"},"impCnt":{"type":"number","description":"수입건수"},"impDlr":{"type":"number","description":"수입금액(달러)"},"year":{"type":"string","description":"기간"}}},"getNewtradeList_response":{"type":"object","properties":{"header":{"type":"object","description":"header","properties":{"resultMsg":{"type":"string","description":"결과메시지"},"resultCode":{"type":"string","description":"결과코드"}}},"body":{"type":"object","description":"body","properties":{"items":{"type":"object","description":"item
+[expDlr] ...":{"item":{"type":"object","description":"item","properties":{"balPayments":{"type":"number","description":"무역수지(달러)","properties":{}},"expCnt":{"type":"number","description":"수출건수","properties":{}},"expDlr":{"type":"number","description":"수출금액(달러)","properties":{}},"impCnt":{"type":"number","description":"수입건수","properties":{}},"impDlr":{"type":"number","description":"수입금액(달러)","properties":{}},"year":{"type":"string","description":"기간","properties":{}}}}}}}}},"xml":{"name":"response"}}}},"tags":["API 목록"],"summary":"수출입총괄 서비스","description":"수출입총괄 서비스 조회목록 입니다.","operationId":"getNewtradeList","consumes":["application/json"],"produces":["application/xml"]},"parameters":[{"name":"serviceKey","description":"공공데이터포털에서 받은 인증키","type":"string","required":true,"in":"query"},{"name":"strtYymm","description":"시작년월","type":"string","required":true,"in":"query"},{"name":"endYymm","description":"종료년월","type":"string","required":true,"in":"query"}]}},"definitions":{"header":{"type":"object","properties":{"resultMsg":{"type":"string","description":"결과메시지"},"resultCode":{"type":"string","description":"결과코드"}}},"body":{"type":"object","properties":{"items":{"$ref":"#/definitions/items"}}},"items":{"type":"object","properties":{"item":{"$ref":"#/definitions/item"}}}," item":{"type":"object","properties":{"balPayments":{"type":"number","description":"무역수지(달러)"},"expCnt":{"type":"number","description":"수출건수"},"expDlr":{"type":"number","description":"수출미화금액(달러)"},"impCnt":{"type":"number","description":"수입건수"},"impDlr":{"type":"number","description":"수입미화금액(달러)"},"year":{"type":"string","description":"기간"}}},"item":{"type":"object","properties":{"balPayments":{"type":"number","description
+[기간] ...와 승인 또는 일시중지 상태를 확인해 주세요. SERVICE_KEY_IS_NOT_REGISTERED_ERROR 30 등록되지 않은 API 인증키입니다. 인증키가 정확한지와 해당 서비스의 활용신청이 정상적으로 완료되었는지 확인해 주세요. DEADLINE_HAS_EXPIRED_ERROR 31 API 인증키의 사용 기한이 만료되었습니다. 공공데이터포털에서 이용 기간을 확인하거나 갱신해 주세요. 닫기 닫기 window.fn_page = function(pageNo) { $.ajax({ url: "/tcs/dss/selectPrcuseExamList.do", data: { publicDataDetailPk: $("#publicDataDetailPk").val(), pageIndex: fn_empty(pageNo) ? 1 : pageNo }, success: function (data) { const $target = $("#openTabpanel02"); $target.children().remove(); $target.append(data); loadingStop("contents"); } }) } $(function() { fn_page(1); $('.guide-down').on('click', function() { const url = "/images/biz/swagger-guide/gw/gateway_swagger_guide.pdf" window.open(url, "_blank"); }) }) const fn_listCsvDownload = function (filename) { $.ajax({ url: "/assets/csvs/" + filename + ".csv", contentType: 'text/csv', success: function (data) { saveAs(data, filename); }, error: function (err) { // console.log(err); } }); } 목록으로 돌아가기 활용신청 기업회원입니다. 활용신청할 서비스키를 선택해주세요 프로젝트 서비스키 개인 서비스키 닫기 (function() { var modal = document.getElementById("business-select-modal"); if (!modal) return; if (modal.parentNode !== document.body) { document.body.appendChild(modal); } modal.addEventListener("click", function(event) { if (!event.target.closest(".close-modal")) return; if (typeof krds_modal !== "undefined" && krds_modal.closeModal) { krds_modal.closeModal("business-select-modal"); } }); })(); $(function () { init(); buttonEvent(); }); let mberTy; window.onload = function() { let tyDetailCode = 'PRDE02'; if(tyDetailCode == 'PRDE02') { const swaggerUrl = ''; const swaggerJson = `{"swagger":"2.0","info":{"description":"통관업무처리 절차를 기초로 수집한 무역자료를 집계한 수출입무역통계입니다.
+CALL getNewtrade {'strtYymm': '202501', 'endYymm': '202512'} -> 400
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenAPI_ServiceResponse>
+<cmmMsgHeader>
+  <errMsg>NO_OPENAPI_SERVICE_ERROR</errMsg>
+  <returnAuthMsg>해당 오픈API 서비스가 없거나 폐기됨</returnAuthMsg>
+  <returnReasonCode>12</returnReasonCode>
+</cmmMsgHeader>
+</OpenAPI_ServiceResponse>
+
+
+CALL getNewtradeList {'strtYymm': '202501', 'endYymm': '202512'} -> 403
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenAPI_ServiceResponse>
+<cmmMsgHeader>
+  <errMsg>SERVICE_KEY_IS_NOT_REGISTERED_ERROR</errMsg>
+  <returnAuthMsg>등록되지 않은 서비스키</returnAuthMsg>
+  <returnReasonCode>30</returnReasonCode>
+</cmmMsgHeader>
+</OpenAPI_ServiceResponse>
+
+
+CALL getNewtradeSmmryList {'strtYymm': '202501', 'endYymm': '202512'} -> 400
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenAPI_ServiceResponse>
+<cmmMsgHeader>
+  <errMsg>NO_OPENAPI_SERVICE_ERROR</errMsg>
+  <returnAuthMsg>해당 오픈API 서비스가 없거나 폐기됨</returnAuthMsg>
+  <returnReasonCode>12</returnReasonCode>
+</cmmMsgHeader>
+</OpenAPI_ServiceResponse>
+
