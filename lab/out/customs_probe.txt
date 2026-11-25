@@ -1,0 +1,217 @@
+key set: True len=98
+https://www.data.go.kr/data/15101607/openapi.do -> 200 title=관세청_신성질별 국가별 수출입실적(GW) | 공공데이터포털 names=['관세청_신성질별 국가별 수출입실적(GW)', '관세청_신성질별 국가별 수출입실적(GW) | 공공데이터포털'] eps=['https://apis.data.go.kr/1220000/nnewtempertrade']
+https://www.data.go.kr/catalog/15101607/openapi.json -> 200 title=None names=['관세청_신성질별 국가별 수출입실적(GW)'] eps=['https://apis.data.go.kr/1220000/nnewtempertrade']
+https://www.data.go.kr/data/15134343/openapi.do -> 200 title=관세청_시군구별 품목별 수출입실적 | 공공데이터포털 names=['관세청_시군구별 품목별 수출입실적', '관세청_시군구별 품목별 수출입실적 | 공공데이터포털'] eps=['https://apis.data.go.kr/1220000/sigunguperprlstperacrs']
+https://www.data.go.kr/catalog/15134343/openapi.json -> 200 title=None names=['관세청_시군구별 품목별 수출입실적'] eps=['https://apis.data.go.kr/1220000/sigunguperprlstperacrs']
+https://www.data.go.kr/data/15101641/openapi.do -> 200 title=관세청_시도별 품목별 수출입실적(GW) | 공공데이터포털 names=['관세청_시도별 품목별 수출입실적(GW)', '관세청_시도별 품목별 수출입실적(GW) | 공공데이터포털'] eps=['https://apis.data.go.kr/1220000/sidoitemtrade']
+https://www.data.go.kr/catalog/15101641/openapi.json -> 200 title=None names=['관세청_시도별 품목별 수출입실적(GW)'] eps=['https://apis.data.go.kr/1220000/sidoitemtrade']
+https://www.data.go.kr/data/15101609/openapi.do -> 200 title=관세청_품목별 수출입실적(GW) | 공공데이터포털 names=['관세청_품목별 수출입실적(GW)', '관세청_품목별 수출입실적(GW) | 공공데이터포털'] eps=['https://apis.data.go.kr/1220000/Itemtrade']
+https://www.data.go.kr/catalog/15101609/openapi.json -> 200 title=None names=['관세청_품목별 수출입실적(GW)'] eps=['https://apis.data.go.kr/1220000/Itemtrade']
+https://www.data.go.kr/data/15101630/openapi.do -> 200 title=관세청_대륙별 수출입실적(GW) | 공공데이터포털 names=['관세청_대륙별 수출입실적(GW)', '관세청_대륙별 수출입실적(GW) | 공공데이터포털'] eps=['https://apis.data.go.kr/1220000/continenttradet']
+https://www.data.go.kr/catalog/15101630/openapi.json -> 200 title=None names=['관세청_대륙별 수출입실적(GW)'] eps=['https://apis.data.go.kr/1220000/continenttradet']
+https://www.data.go.kr/data/15100475/openapi.do -> 200 title=관세청_품목별 국가별 수출입실적(GW) | 공공데이터포털 names=['관세청_공공데이터포털_기술문서(1.품목별국가별수출입실적)-수정', '관세청_품목별 국가별 수출입실적(GW)', '관세청_품목별 국가별 수출입실적(GW) | 공공데이터포털'] eps=['https://apis.data.go.kr/1220000/nitemtrade', 'https://apis.data.go.kr/1220000/nitemtrade/getNitemtradeList']
+https://www.data.go.kr/catalog/15100475/openapi.json -> None title=None names=[] eps=[]
+https://www.data.go.kr/data/15102108/openapi.do -> 200 title=관세청_수출입총괄(GW) | 공공데이터포털 names=['관세청_수출입총괄(GW)', '관세청_수출입총괄(GW) | 공공데이터포털'] eps=['https://apis.data.go.kr/1220000/Newtrade']
+https://www.data.go.kr/catalog/15102108/openapi.json -> 200 title=None names=['관세청_수출입총괄(GW)'] eps=['https://apis.data.go.kr/1220000/Newtrade']
+https://www.data.go.kr/data/15101612/openapi.do -> 200 title=관세청_국가별 수출입실적(GW) | 공공데이터포털 names=['관세청_국가별 수출입실적(GW)', '관세청_국가별 수출입실적(GW) | 공공데이터포털'] eps=['https://apis.data.go.kr/1220000/nationtrade']
+https://www.data.go.kr/catalog/15101612/openapi.json -> 200 title=None names=['관세청_국가별 수출입실적(GW)'] eps=['https://apis.data.go.kr/1220000/nationtrade']
+https://www.data.go.kr/data/15101608/openapi.do -> 500 title=에러 | 공공데이터포털 names=[] eps=[]
+https://www.data.go.kr/catalog/15101608/openapi.json -> 200 title=None names=[] eps=[]
+ENDPOINTS: ["https://apis.data.go.kr/1220000/Itemtrade", "https://apis.data.go.kr/1220000/Newtrade", "https://apis.data.go.kr/1220000/continenttradet", "https://apis.data.go.kr/1220000/nationtrade", "https://apis.data.go.kr/1220000/nitemtrade", "https://apis.data.go.kr/1220000/nitemtrade/getNitemtradeList", "https://apis.data.go.kr/1220000/nnewtempertrade", "https://apis.data.go.kr/1220000/sidoitemtrade", "https://apis.data.go.kr/1220000/sigunguperprlstperacrs"]
+CALL https://apis.data.go.kr/1220000/Itemtrade {'strtYymm': '202501', 'endYymm': '202512'} -> 400
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenAPI_ServiceResponse>
+<cmmMsgHeader>
+  <errMsg>NO_OPENAPI_SERVICE_ERROR</errMsg>
+  <returnAuthMsg>해당 오픈API 서비스가 없거나 폐기됨</returnAuthMsg>
+  <returnReasonCode>12</returnReasonCode>
+</cmmMsgHeader>
+</OpenAPI_ServiceResponse>
+
+
+CALL https://apis.data.go.kr/1220000/Itemtrade {'strtYymm': '202501', 'endYymm': '202512', 'cntyCd': 'US'} -> 400
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenAPI_ServiceResponse>
+<cmmMsgHeader>
+  <errMsg>NO_OPENAPI_SERVICE_ERROR</errMsg>
+  <returnAuthMsg>해당 오픈API 서비스가 없거나 폐기됨</returnAuthMsg>
+  <returnReasonCode>12</returnReasonCode>
+</cmmMsgHeader>
+</OpenAPI_ServiceResponse>
+
+
+CALL https://apis.data.go.kr/1220000/Newtrade {'strtYymm': '202501', 'endYymm': '202512'} -> 400
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenAPI_ServiceResponse>
+<cmmMsgHeader>
+  <errMsg>NO_OPENAPI_SERVICE_ERROR</errMsg>
+  <returnAuthMsg>해당 오픈API 서비스가 없거나 폐기됨</returnAuthMsg>
+  <returnReasonCode>12</returnReasonCode>
+</cmmMsgHeader>
+</OpenAPI_ServiceResponse>
+
+
+CALL https://apis.data.go.kr/1220000/Newtrade {'strtYymm': '202501', 'endYymm': '202512', 'cntyCd': 'US'} -> 400
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenAPI_ServiceResponse>
+<cmmMsgHeader>
+  <errMsg>NO_OPENAPI_SERVICE_ERROR</errMsg>
+  <returnAuthMsg>해당 오픈API 서비스가 없거나 폐기됨</returnAuthMsg>
+  <returnReasonCode>12</returnReasonCode>
+</cmmMsgHeader>
+</OpenAPI_ServiceResponse>
+
+
+CALL https://apis.data.go.kr/1220000/continenttradet {'strtYymm': '202501', 'endYymm': '202512'} -> 400
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenAPI_ServiceResponse>
+<cmmMsgHeader>
+  <errMsg>NO_OPENAPI_SERVICE_ERROR</errMsg>
+  <returnAuthMsg>해당 오픈API 서비스가 없거나 폐기됨</returnAuthMsg>
+  <returnReasonCode>12</returnReasonCode>
+</cmmMsgHeader>
+</OpenAPI_ServiceResponse>
+
+
+CALL https://apis.data.go.kr/1220000/continenttradet {'strtYymm': '202501', 'endYymm': '202512', 'cntyCd': 'US'} -> 400
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenAPI_ServiceResponse>
+<cmmMsgHeader>
+  <errMsg>NO_OPENAPI_SERVICE_ERROR</errMsg>
+  <returnAuthMsg>해당 오픈API 서비스가 없거나 폐기됨</returnAuthMsg>
+  <returnReasonCode>12</returnReasonCode>
+</cmmMsgHeader>
+</OpenAPI_ServiceResponse>
+
+
+CALL https://apis.data.go.kr/1220000/nationtrade {'strtYymm': '202501', 'endYymm': '202512'} -> 400
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenAPI_ServiceResponse>
+<cmmMsgHeader>
+  <errMsg>NO_OPENAPI_SERVICE_ERROR</errMsg>
+  <returnAuthMsg>해당 오픈API 서비스가 없거나 폐기됨</returnAuthMsg>
+  <returnReasonCode>12</returnReasonCode>
+</cmmMsgHeader>
+</OpenAPI_ServiceResponse>
+
+
+CALL https://apis.data.go.kr/1220000/nationtrade {'strtYymm': '202501', 'endYymm': '202512', 'cntyCd': 'US'} -> 400
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenAPI_ServiceResponse>
+<cmmMsgHeader>
+  <errMsg>NO_OPENAPI_SERVICE_ERROR</errMsg>
+  <returnAuthMsg>해당 오픈API 서비스가 없거나 폐기됨</returnAuthMsg>
+  <returnReasonCode>12</returnReasonCode>
+</cmmMsgHeader>
+</OpenAPI_ServiceResponse>
+
+
+CALL https://apis.data.go.kr/1220000/nitemtrade {'strtYymm': '202501', 'endYymm': '202512'} -> 400
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenAPI_ServiceResponse>
+<cmmMsgHeader>
+  <errMsg>NO_OPENAPI_SERVICE_ERROR</errMsg>
+  <returnAuthMsg>해당 오픈API 서비스가 없거나 폐기됨</returnAuthMsg>
+  <returnReasonCode>12</returnReasonCode>
+</cmmMsgHeader>
+</OpenAPI_ServiceResponse>
+
+
+CALL https://apis.data.go.kr/1220000/nitemtrade {'strtYymm': '202501', 'endYymm': '202512', 'cntyCd': 'US'} -> 400
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenAPI_ServiceResponse>
+<cmmMsgHeader>
+  <errMsg>NO_OPENAPI_SERVICE_ERROR</errMsg>
+  <returnAuthMsg>해당 오픈API 서비스가 없거나 폐기됨</returnAuthMsg>
+  <returnReasonCode>12</returnReasonCode>
+</cmmMsgHeader>
+</OpenAPI_ServiceResponse>
+
+
+CALL https://apis.data.go.kr/1220000/nitemtrade/getNitemtradeList {'strtYymm': '202501', 'endYymm': '202512'} -> 403
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenAPI_ServiceResponse>
+<cmmMsgHeader>
+  <errMsg>SERVICE_KEY_IS_NOT_REGISTERED_ERROR</errMsg>
+  <returnAuthMsg>등록되지 않은 서비스키</returnAuthMsg>
+  <returnReasonCode>30</returnReasonCode>
+</cmmMsgHeader>
+</OpenAPI_ServiceResponse>
+
+
+CALL https://apis.data.go.kr/1220000/nitemtrade/getNitemtradeList {'strtYymm': '202501', 'endYymm': '202512', 'cntyCd': 'US'} -> 403
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenAPI_ServiceResponse>
+<cmmMsgHeader>
+  <errMsg>SERVICE_KEY_IS_NOT_REGISTERED_ERROR</errMsg>
+  <returnAuthMsg>등록되지 않은 서비스키</returnAuthMsg>
+  <returnReasonCode>30</returnReasonCode>
+</cmmMsgHeader>
+</OpenAPI_ServiceResponse>
+
+
+CALL https://apis.data.go.kr/1220000/nnewtempertrade {'strtYymm': '202501', 'endYymm': '202512'} -> 400
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenAPI_ServiceResponse>
+<cmmMsgHeader>
+  <errMsg>NO_OPENAPI_SERVICE_ERROR</errMsg>
+  <returnAuthMsg>해당 오픈API 서비스가 없거나 폐기됨</returnAuthMsg>
+  <returnReasonCode>12</returnReasonCode>
+</cmmMsgHeader>
+</OpenAPI_ServiceResponse>
+
+
+CALL https://apis.data.go.kr/1220000/nnewtempertrade {'strtYymm': '202501', 'endYymm': '202512', 'cntyCd': 'US'} -> 400
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenAPI_ServiceResponse>
+<cmmMsgHeader>
+  <errMsg>NO_OPENAPI_SERVICE_ERROR</errMsg>
+  <returnAuthMsg>해당 오픈API 서비스가 없거나 폐기됨</returnAuthMsg>
+  <returnReasonCode>12</returnReasonCode>
+</cmmMsgHeader>
+</OpenAPI_ServiceResponse>
+
+
+CALL https://apis.data.go.kr/1220000/sidoitemtrade {'strtYymm': '202501', 'endYymm': '202512'} -> 400
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenAPI_ServiceResponse>
+<cmmMsgHeader>
+  <errMsg>NO_OPENAPI_SERVICE_ERROR</errMsg>
+  <returnAuthMsg>해당 오픈API 서비스가 없거나 폐기됨</returnAuthMsg>
+  <returnReasonCode>12</returnReasonCode>
+</cmmMsgHeader>
+</OpenAPI_ServiceResponse>
+
+
+CALL https://apis.data.go.kr/1220000/sidoitemtrade {'strtYymm': '202501', 'endYymm': '202512', 'cntyCd': 'US'} -> 400
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenAPI_ServiceResponse>
+<cmmMsgHeader>
+  <errMsg>NO_OPENAPI_SERVICE_ERROR</errMsg>
+  <returnAuthMsg>해당 오픈API 서비스가 없거나 폐기됨</returnAuthMsg>
+  <returnReasonCode>12</returnReasonCode>
+</cmmMsgHeader>
+</OpenAPI_ServiceResponse>
+
+
+CALL https://apis.data.go.kr/1220000/sigunguperprlstperacrs {'strtYymm': '202501', 'endYymm': '202512'} -> 400
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenAPI_ServiceResponse>
+<cmmMsgHeader>
+  <errMsg>NO_OPENAPI_SERVICE_ERROR</errMsg>
+  <returnAuthMsg>해당 오픈API 서비스가 없거나 폐기됨</returnAuthMsg>
+  <returnReasonCode>12</returnReasonCode>
+</cmmMsgHeader>
+</OpenAPI_ServiceResponse>
+
+
+CALL https://apis.data.go.kr/1220000/sigunguperprlstperacrs {'strtYymm': '202501', 'endYymm': '202512', 'cntyCd': 'US'} -> 400
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenAPI_ServiceResponse>
+<cmmMsgHeader>
+  <errMsg>NO_OPENAPI_SERVICE_ERROR</errMsg>
+  <returnAuthMsg>해당 오픈API 서비스가 없거나 폐기됨</returnAuthMsg>
+  <returnReasonCode>12</returnReasonCode>
+</cmmMsgHeader>
+</OpenAPI_ServiceResponse>
+
